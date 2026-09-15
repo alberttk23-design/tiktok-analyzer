@@ -1,0 +1,169 @@
+{
+  "briefs": [
+    {
+      "title": "Realism Check: This Olive Tree Looks Like a Real One",
+      "objective": "Demonstrate the tree’s realistic appearance and maintenance-free nature through side-by-side comparison with a real tree.",
+      "target_customer": "Homeowners, apartment residents, busy professionals who want realistic home decor without upkeep.",
+      "video_length": "45 seconds",
+      "scene_plan": [
+        {
+          "time": "0-3s",
+          "visual": "Close-up of olive leaf texture — natural lighting.",
+          "camera": "Static close-up shot.",
+          "action": "Focus on leaf detail — no movement.",
+          "text_overlay": "This is the only one that looks real."
+        },
+        {
+          "time": "3-10s",
+          "visual": "Product shot — hykolity artificial olive tree on neutral background.",
+          "camera": "Static shot — slightly elevated.",
+          "action": "Text overlay appears.",
+          "text_overlay": "No watering. Realistic."
+        },
+        {
+          "time": "10-20s",
+          "visual": "Split-screen — left: real olive tree, right: hykolity tree.",
+          "camera": "Split-screen static.",
+          "action": "No movement — focus on visual comparison.",
+          "text_overlay": "Real vs. Realistic — no maintenance."
+        },
+        {
+          "time": "20-30s",
+          "visual": "CTA shot — product on shelf with ‘Only 5 left’ + ‘Tap to Shop’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Only 5 left. Tap to Shop."
+        },
+        {
+          "time": "30-45s",
+          "visual": "Product shot — ‘Realistic’ + ‘No maintenance’ + ‘Tap to Shop’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Realistic. No maintenance. Tap to Shop."
+        }
+      ],
+      "editing_style": [
+        "Clean, high-contrast visuals",
+        "Minimal transitions",
+        "Text overlays for key benefits",
+        "Natural lighting throughout"
+      ],
+      "production_notes": [
+        "Use natural lighting for real vs. fake comparison.",
+        "Ensure real tree is authentic — not staged.",
+        "Avoid any mention of Costco or other brands.",
+        "No fake scarcity — use ‘Only 5 left’ for urgency.",
+        "All text overlays must be clear, bold, and legible."
+      ]
+    },
+    {
+      "title": "Transform Your Empty Corner in 30 Seconds",
+      "objective": "Show how the tree instantly transforms an empty space into a stylish, lived-in area.",
+      "target_customer": "Apartment residents, busy professionals, people who want easy home upgrades.",
+      "video_length": "45 seconds",
+      "scene_plan": [
+        {
+          "time": "0-3s",
+          "visual": "Before shot — empty corner with ‘This space? Boring.’ text.",
+          "camera": "Static shot — wide angle.",
+          "action": "Text overlay appears.",
+          "text_overlay": "This space? Boring."
+        },
+        {
+          "time": "3-10s",
+          "visual": "Tree placed — ‘Instant upgrade.’",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Instant upgrade."
+        },
+        {
+          "time": "10-20s",
+          "visual": "360° spin — tree in motion.",
+          "camera": "Smooth 360° spin — handheld or gimbal.",
+          "action": "Text overlay appears.",
+          "text_overlay": "No maintenance. Perfect fit."
+        },
+        {
+          "time": "20-30s",
+          "visual": "CTA shot — ‘Limited stock’ + ‘Tap to Shop’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Only 5 left. Tap to Shop."
+        },
+        {
+          "time": "30-45s",
+          "visual": "Product shot — ‘Perfect for small space’ + ‘No watering’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Perfect for small space. No watering."
+        }
+      ],
+      "editing_style": [
+        "Quick cuts",
+        "Dynamic camera movement",
+        "High retention pacing",
+        "Clear text overlays"
+      ],
+      "production_notes": [
+        "Use quick cuts and dynamic camera movement.",
+        "Ensure 360° spin is smooth and visually engaging.",
+        "Avoid any mention of ‘Limited stock’ — use ‘Only 5 left’ for urgency.",
+        "All shots must be executable — no CGI or fake elements."
+      ]
+    },
+    {
+      "title": "No Watering? No Problem. This Tree Fixes It.",
+      "objective": "Show the tree as a stress-free, maintenance-free solution for busy lifestyles.",
+      "target_customer": "Busy professionals, apartment residents, people tired of plant care.",
+      "video_length": "45 seconds",
+      "scene_plan": [
+        {
+          "time": "0-3s",
+          "visual": "User holding phone — ‘I’m tired of watering plants.’",
+          "camera": "Static shot — close-up on face.",
+          "action": "Text overlay appears.",
+          "text_overlay": "I’m tired of watering plants."
+        },
+        {
+          "time": "3-10s",
+          "visual": "Tree placed — ‘No watering’ + ‘No maintenance’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "No watering. No maintenance."
+        },
+        {
+          "time": "10-20s",
+          "visual": "User smiling — ‘No more stress.’",
+          "camera": "Static shot — close-up on face.",
+          "action": "Text overlay appears.",
+          "text_overlay": "No more stress."
+        },
+        {
+          "time": "20-30s",
+          "visual": "CTA shot — ‘Only 5 left’ + ‘Tap to Shop’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Only 5 left. Tap to Shop."
+        },
+        {
+          "time": "30-45s",
+          "visual": "Product shot — ‘Perfect for small space’ + ‘Realistic’.",
+          "camera": "Static shot — centered.",
+          "action": "Text overlay appears.",
+          "text_overlay": "Perfect for small space. Realistic."
+        }
+      ],
+      "editing_style": [
+        "Natural lighting",
+        "Authentic user reactions",
+        "Emotional relief tone"
+      ],
+      "production_notes": [
+        "Use natural lighting and authentic user reactions.",
+        "Ensure user is smiling and relaxed to trigger emotional relief.",
+        "Avoid any mention of ‘Limited stock’ — use ‘Only 5 left’ for urgency.",
+        "All text overlays must be clear, bold, and legible."
+      ]
+    }
+  ]
+}

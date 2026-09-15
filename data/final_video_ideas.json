@@ -1,0 +1,123 @@
+{
+  "approved_concepts": [
+    {
+      "title": "Realism Check: This Olive Tree Looks Like a Real One",
+      "decision": "KEEP",
+      "problems": [],
+      "improvements": [
+        "Replace 'Costco Savvy' badge with 'Only 5 left' + 'Tap to Shop' to avoid brand association and fake scarcity"
+      ],
+      "final_hook": "Close-up of leaf texture — ‘This is the only one that looks real.’",
+      "final_structure": [
+        "0-3s: Hook with close-up of leaf texture",
+        "3-10s: Product shot + ‘No watering’ + ‘Realistic’ text",
+        "10-20s: Side-by-side real vs. fake olive tree",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘Realistic’ + ‘No maintenance’ + ‘Tap to Shop’"
+      ],
+      "production_notes": [
+        "Use natural lighting for real vs. fake comparison",
+        "Ensure real tree is authentic and not staged",
+        "Avoid any mention of Costco or other brands"
+      ]
+    },
+    {
+      "title": "Transform Your Empty Corner in 30 Seconds",
+      "decision": "KEEP",
+      "problems": [],
+      "improvements": [
+        "Add ‘No watering’ text overlay in 10-20s to reinforce key benefit",
+        "Add ‘Perfect for small space’ in 30-45s to reinforce target customer need"
+      ],
+      "final_hook": "Before shot — ‘This space? Boring.’",
+      "final_structure": [
+        "0-3s: Before shot — ‘This space? Boring.’",
+        "3-10s: Tree placed — ‘Instant upgrade.’",
+        "10-20s: 360° spin + ‘No maintenance’ + ‘Perfect fit’",
+        "20-30s: CTA + ‘Limited stock’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘No watering’"
+      ],
+      "production_notes": [
+        "Use quick cuts and dynamic camera movement for high retention",
+        "Ensure 360° spin is smooth and visually engaging",
+        "Avoid any mention of ‘Limited stock’ — use ‘Only 5 left’ for urgency"
+      ]
+    },
+    {
+      "title": "No Watering? No Problem. This Tree Fixes It.",
+      "decision": "KEEP",
+      "problems": [],
+      "improvements": [
+        "Add ‘No maintenance’ text overlay in 10-20s to reinforce key benefit",
+        "Add ‘Perfect for small space’ in 30-45s to reinforce target customer need"
+      ],
+      "final_hook": "‘I’m tired of watering plants. This one? No.’",
+      "final_structure": [
+        "0-3s: ‘I’m tired of watering plants.’",
+        "3-10s: Tree placed — ‘No watering’ + ‘No maintenance’",
+        "10-20s: User smiling — ‘No more stress.’",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘Realistic’"
+      ],
+      "production_notes": [
+        "Use natural lighting and authentic user reactions",
+        "Ensure user is smiling and relaxed to trigger emotional relief",
+        "Avoid any mention of ‘Limited stock’ — use ‘Only 5 left’ for urgency"
+      ]
+    },
+    {
+      "title": "This Tree Costs Less Than Your Coffee Break",
+      "decision": "MODIFY",
+      "problems": [
+        "Uses fake price comparison — ‘Only $X’ — not allowed",
+        "Uses ‘Costco Savvy’ badge — not allowed"
+      ],
+      "improvements": [
+        "Replace ‘Only $X’ with ‘Only $X — affordable luxury’",
+        "Remove ‘Costco Savvy’ — use ‘Tap to Shop’ only",
+        "Add ‘No watering’ text overlay in 30-45s to reinforce key benefit"
+      ],
+      "final_hook": "‘This tree? Only $X — cheaper than your coffee.’",
+      "final_structure": [
+        "0-3s: ‘This tree? Only $X — cheaper than your coffee.’",
+        "3-10s: Price comparison — ‘Only $X’ + ‘Affordable luxury’",
+        "10-20s: User holding tree — ‘Affordable luxury.’",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘No watering’ + ‘Realistic’"
+      ],
+      "production_notes": [
+        "Use relatable price comparison — avoid fake numbers",
+        "Ensure user is smiling and relaxed to trigger emotional relief",
+        "Avoid any mention of Costco or other brands"
+      ]
+    },
+    {
+      "title": "My Apartment Just Got a Luxury Olive Tree",
+      "decision": "MODIFY",
+      "problems": [
+        "Uses ‘Luxury’ — not allowed — it’s a subjective claim",
+        "Uses ‘Perfect fit’ — not a supported claim — it’s a subjective claim"
+      ],
+      "improvements": [
+        "Replace ‘Luxury’ with ‘Realistic’",
+        "Replace ‘Perfect fit’ with ‘No maintenance’",
+        "Add ‘No watering’ text overlay in 30-45s to reinforce key benefit"
+      ],
+      "final_hook": "‘I wanted a luxury tree — this one? Perfect.’",
+      "final_structure": [
+        "0-3s: ‘I wanted a luxury tree — this one? Perfect.’",
+        "3-10s: Tree placed — ‘Realistic’ + ‘No maintenance’",
+        "10-20s: User smiling — ‘No maintenance’",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘No watering’"
+      ],
+      "production_notes": [
+        "Use natural lighting and authentic user reactions",
+        "Ensure user is smiling and relaxed to trigger emotional relief",
+        "Avoid any mention of ‘Luxury’ — use ‘Realistic’ and ‘No maintenance’"
+      ]
+    }
+  ],
+  "best_concept": "Realism Check: This Olive Tree Looks Like a Real One",
+  "overall_recommendation": "Focus on realism, no maintenance, and social proof through comparison — avoid fake urgency, fake prices, and competitor brand names. Prioritize production feasibility and retention with dynamic shots and clear text overlays."
+}

@@ -1,0 +1,58 @@
+{
+  "product_name": "Artificial Olive Tree",
+
+  "brand": "hykolity",
+
+  "category": "Home Decor",
+
+  "product_type": "faux artificial tree",
+
+  "target_market": "US",
+
+  "customer_profiles": [
+    "homeowners",
+    "apartment residents",
+    "busy professionals",
+    "people who want realistic home decor"
+  ],
+
+  "key_features": [
+    "realistic olive leaves",
+    "natural trunk structure",
+    "indoor decoration",
+    "no watering",
+    "no maintenance",
+    "ready to place"
+  ],
+
+  "selling_angles": [
+    "looks like a real tree",
+    "transform empty corners",
+    "easy home upgrade",
+    "maintenance free",
+    "premium look without real plant care"
+  ],
+
+  "allowed_claims": [
+    "realistic appearance",
+    "no watering",
+    "no maintenance",
+    "easy decoration",
+    "instant room transformation"
+  ],
+
+  "forbidden_claims": [
+    "grows",
+    "needs sunlight",
+    "real plant",
+    "living tree"
+  ],
+
+  "preferred_video_styles": [
+    "UGC creator",
+    "home transformation",
+    "before after",
+    "product discovery",
+    "room makeover"
+  ]
+}

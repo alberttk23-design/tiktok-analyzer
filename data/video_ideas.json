@@ -1,0 +1,163 @@
+{
+  "concepts": [
+    {
+      "title": "Realism Check: This Olive Tree Looks Like a Real One",
+      "angle": "Realism / product proof",
+      "hook": "Close-up of leaf texture — ‘This is the only one that looks real.’",
+      "hook_reason": "Triggers buyer’s desire for authenticity and avoids fake claims.",
+      "target_customer": "People who want realistic home decor",
+      "video_structure": [
+        "0-3s: Hook with close-up of leaf texture",
+        "3-10s: Product shot + ‘No watering’ + ‘Realistic’ text",
+        "10-20s: Side-by-side with real olive tree (real vs. fake)",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Costco Savvy’ badge",
+        "30-45s: ‘Realistic’ + ‘No maintenance’ + ‘Tap to Shop’"
+      ],
+      "shot_list": [
+        "Close-up of leaf texture",
+        "Side-by-side real vs. fake olive tree",
+        "Product shot with ‘No watering’ text overlay",
+        "User holding tree in hand to show scale",
+        "Quick cut to ‘Costco Savvy’ badge"
+      ],
+      "text_overlay": [
+        "Realistic. No watering.",
+        "Looks like a real tree.",
+        "Only 5 left.",
+        "Costco Savvy"
+      ],
+      "cta": "Tap to Shop",
+      "conversion_reason": "Uses real vs. fake comparison to build trust, includes urgency and social proof via Costco badge."
+    },
+    {
+      "title": "Transform Your Empty Corner in 30 Seconds",
+      "angle": "Room transformation",
+      "hook": "Before shot: empty shelf — ‘This space? Boring.’",
+      "hook_reason": "Triggers FOMO and aspirational transformation.",
+      "target_customer": "Apartment residents, busy professionals",
+      "video_structure": [
+        "0-3s: Before shot — ‘This space? Boring.’",
+        "3-10s: Tree placed — ‘Instant upgrade.’",
+        "10-20s: 360° spin + ‘No maintenance’ + ‘Perfect fit’",
+        "20-30s: CTA + ‘Limited stock’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘No watering’"
+      ],
+      "shot_list": [
+        "Before shot — empty shelf",
+        "Tree placed — 360° spin",
+        "Close-up of tree in corner",
+        "Quick cut to ‘Limited stock’",
+        "Final shot — ‘Perfect for small space’"
+      ],
+      "text_overlay": [
+        "Instant upgrade.",
+        "No maintenance.",
+        "Perfect fit.",
+        "Limited stock.",
+        "Perfect for small space"
+      ],
+      "cta": "Tap to Shop",
+      "conversion_reason": "Aspirational transformation + clear benefit + urgency trigger."
+    },
+    {
+      "title": "No Watering? No Problem. This Tree Fixes It.",
+      "angle": "Problem solution",
+      "hook": "‘I’m tired of watering plants. This one? No.’",
+      "hook_reason": "Triggers pain point + emotional relief.",
+      "target_customer": "Busy professionals, apartment dwellers",
+      "video_structure": [
+        "0-3s: ‘I’m tired of watering plants.’",
+        "3-10s: Tree placed — ‘No watering’ + ‘No maintenance’",
+        "10-20s: User smiling — ‘No more stress.’",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘Realistic’"
+      ],
+      "shot_list": [
+        "User holding plant pot — ‘I’m tired of watering.’",
+        "Tree placed — ‘No watering’",
+        "User smiling — ‘No more stress.’",
+        "Quick cut to ‘Only 5 left’",
+        "Final shot — ‘Realistic’"
+      ],
+      "text_overlay": [
+        "No watering.",
+        "No maintenance.",
+        "No more stress.",
+        "Only 5 left.",
+        "Realistic"
+      ],
+      "cta": "Tap to Shop",
+      "conversion_reason": "Solves a real pain point + emotional trigger + urgency."
+    },
+    {
+      "title": "This Tree Costs Less Than Your Coffee Break",
+      "angle": "Value comparison",
+      "hook": "‘This tree? Only $X — cheaper than your coffee.’",
+      "hook_reason": "Affordability hook + relatable comparison.",
+      "target_customer": "Budget-conscious homeowners, apartment residents",
+      "video_structure": [
+        "0-3s: ‘This tree? Only $X — cheaper than your coffee.’",
+        "3-10s: Price comparison — ‘Only $X’ + ‘Costco Savvy’",
+        "10-20s: User holding tree — ‘Affordable luxury.’",
+        "20-30s: CTA + ‘Limited stock’ + ‘Tap to Shop’",
+        "30-45s: ‘No watering’ + ‘Realistic’"
+      ],
+      "shot_list": [
+        "Price comparison — ‘Only $X’",
+        "User holding tree — ‘Affordable luxury.’",
+        "Quick cut to ‘Limited stock’",
+        "Final shot — ‘No watering’"
+      ],
+      "text_overlay": [
+        "Only $X — cheaper than your coffee.",
+        "Costco Savvy",
+        "Affordable luxury.",
+        "Limited stock.",
+        "No watering"
+      ],
+      "cta": "Tap to Shop",
+      "conversion_reason": "Uses relatable price comparison + trust badge + clear value."
+    },
+    {
+      "title": "My Apartment Just Got a Luxury Olive Tree",
+      "angle": "Lifestyle aspiration",
+      "hook": "‘I wanted a luxury tree — this one? Perfect.’",
+      "hook_reason": "Triggers aspirational luxury + emotional trigger.",
+      "target_customer": "Busy professionals, homeowners",
+      "video_structure": [
+        "0-3s: ‘I wanted a luxury tree — this one? Perfect.’",
+        "3-10s: Tree placed — ‘Perfect fit’ + ‘Realistic’",
+        "10-20s: User smiling — ‘No maintenance’",
+        "20-30s: CTA + ‘Only 5 left’ + ‘Tap to Shop’",
+        "30-45s: ‘Perfect for small space’ + ‘No watering’"
+      ],
+      "shot_list": [
+        "User smiling — ‘I wanted a luxury tree.’",
+        "Tree placed — ‘Perfect fit’",
+        "Close-up of tree — ‘No maintenance’",
+        "Quick cut to ‘Only 5 left’",
+        "Final shot — ‘Perfect for small space’"
+      ],
+      "text_overlay": [
+        "Perfect fit.",
+        "Realistic.",
+        "No maintenance.",
+        "Only 5 left.",
+        "Perfect for small space"
+      ],
+      "cta": "Tap to Shop",
+      "conversion_reason": "Aspirational luxury + emotional trigger + urgency."
+    }
+  ],
+  "recommended_winner": {
+    "title": "Realism Check: This Olive Tree Looks Like a Real One",
+    "reason": "Best blend of product truth, social proof (via Costco badge), and visual surprise. High retention due to real vs. fake comparison, and conversion is boosted by trust + urgency."
+  },
+  "production_priority": [
+    "Realism Check: This Olive Tree Looks Like a Real One",
+    "Transform Your Empty Corner in 30 Seconds",
+    "No Watering? No Problem. This Tree Fixes It.",
+    "This Tree Costs Less Than Your Coffee Break",
+    "My Apartment Just Got a Luxury Olive Tree"
+  ]
+}

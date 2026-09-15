@@ -1,0 +1,19 @@
+TIKTOK CROSS-VIDEO PATTERN ANALYSIS
+========================================================================
+Videos analyzed: 4
+STATUS: SMOKE TEST ONLY
+
+PERFORMANCE RANKING
+------------------------------------------------------------------------
+WINNER  | 7596478481538665742 | score=0.7667 | pctl=1.00 | views=99300 | like=0.010242 | comment=0.000272 | save=0.002578 | repost=0.004542
+NORMAL  | 7483571103286283527 | score=0.7333 | pctl=0.67 | views=96600 | like=0.043406 | comment=0.00028 | save=0.006749 | repost=0.003406
+NORMAL  | 7460210378484501791 | score=0.3000 | pctl=0.33 | views=79000 | like=0.012 | comment=0.000228 | save=0.005962 | repost=0.001278
+LOSER   | 7517629099930848535 | score=0.2000 | pctl=0.00 | views=42900 | like=0.014732 | comment=0.000373 | save=0.00634 | repost=0.002075
+
+PATTERN ANALYSIS DISABLED
+------------------------------------------------------------------------
+Sample size is below 20 videos.
+No positive, negative, neutral, or combination signals are reported.
+Current dataset is used only to validate extraction and ranking logic.
+
+NOTE: performance ranking is provisional and does not prove causation.

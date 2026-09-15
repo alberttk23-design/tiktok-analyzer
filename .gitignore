@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+env/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+*.log
+
+# System & OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Sensitive Session & Browser Profile
+data/browser_profile/
+data/videos/
+data/speech_analysis/
+data/transcripts/
+data/results/
+data/tiktok_debug.*
+
+# Local Database (Auto-created on start)
+data/*.db
+data/*.db-journal
+
+# Environment
+.env
+.env.local
