@@ -49,6 +49,7 @@ import {
   Headphones,
   Volume2,
 } from "lucide-react";
+import { NicheCharts } from "./components/NicheCharts";
 
 interface NicheFolder {
   id?: number;
@@ -1507,7 +1508,7 @@ ${data.master_analysis.summary}\n`;
             }`}
           >
             <BarChart3 size={16} />
-            <span>Điểm Chung Viral & Macro DNA</span>
+            <span>📊 Biểu Đồ & Macro DNA ({data?.videos?.length || 0})</span>
           </button>
 
           <button
@@ -2748,6 +2749,13 @@ ${data.master_analysis.summary}\n`;
         {/* TAB 2: MACRO PATTERNS & VIRAL DNA */}
         {activeTab === "patterns" && (
           <div className="space-y-6">
+            {/* Interactive Visual Analytics (Recharts) */}
+            <NicheCharts
+              videos={data?.videos || []}
+              reviews={data?.reviews || []}
+              keyword={data?.keyword || keyword || "niche"}
+            />
+
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold flex items-center gap-2 text-white">
                 <BarChart3 className="text-purple-400" size={22} />
