@@ -37,7 +37,6 @@ import {
   ArrowUp,
   ArrowDown,
   Filter,
-  ShoppingCart,
   Key,
   Users,
   Mail,
@@ -130,6 +129,7 @@ interface MasterAnalysis {
   buying_desires?: { username: string; text: string; likes: number }[];
   top_objections?: { username: string; text: string; likes: number }[];
   voc_summary?: string;
+  voc_deep?: any;
   audio_strategy?: {
     dominant_style?: string;
     winning_audio_formula?: string;
@@ -282,6 +282,7 @@ function App() {
       }[];
     };
     audio_intelligence?: any;
+    voc_deep?: any;
     comment_stats?: {
       total_tiktok_comments: number;
       total_crawled_comments: number;
@@ -308,6 +309,11 @@ function App() {
   const [soundTabFilter, setSoundTabFilter] = useState<string>("all");
   const [copiedSoundText, setCopiedSoundText] = useState<string | null>(null);
   const [audioIntelData, setAudioIntelData] = useState<any>(null);
+
+  // Advanced VoC Deep Intelligence states
+  const [vocDeepData, setVocDeepData] = useState<any>(null);
+  const [vocPillarFilter, setVocPillarFilter] = useState<string>("all");
+  const [copiedClapbackId, setCopiedClapbackId] = useState<string | null>(null);
 
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
@@ -521,6 +527,13 @@ function App() {
       if (audioRes.ok) {
         const audioJson = await audioRes.json();
         setAudioIntelData(audioJson);
+      }
+
+      const vocUrl = `${API_BASE}/api/voc-deep?keyword=${encodeURIComponent(kw)}`;
+      const vocRes = await fetch(vocUrl);
+      if (vocRes.ok) {
+        const vocJson = await vocRes.json();
+        setVocDeepData(vocJson);
       }
 
       const patUrl = `${API_BASE}/api/patterns?keyword=${encodeURIComponent(kw)}`;
@@ -1597,156 +1610,403 @@ ${data.master_analysis.summary}\n`;
                   </p>
                 </div>
 
-                {/* Voice of Customer (Tiếng Nói Khách Hàng Từ 1,000+ Bình Luận) */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-5">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                    <div>
-                      <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
-                        <MessageSquare size={16} />
-                        <span>
-                          Tiếng Nói Khách Hàng (Voice of Customer) &bull; Đã Cào {data?.comment_stats?.total_crawled_comments?.toLocaleString() || "3,815"} / {data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Bình Luận ({data?.comment_stats?.crawl_percentage || 56.5}%)
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Thống kê chủ đề bàn luận nhiều nhất &amp; trích xuất nhu cầu mua sắm thực tế từ comment TikTok.
-                      </p>
-                    </div>
+                {/* Voice of Customer (Tiếng Nói Khách Hàng Chuyên Sâu - Advanced VoC Deep Intelligence) */}
+                {(() => {
+                  const voc = vocDeepData || data?.voc_deep || masterAI.voc_deep || {};
+                  const pillars = voc.pillars || {};
+                  const sourcingRecs = voc.sourcing_recommendations || [];
+                  const clapbackScripts = voc.clapback_scripts || [];
+                  const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 3815;
 
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        onClick={() => handleBatchCrawlComments(false)}
-                        disabled={batchCrawlingComments}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                        title="Cào nhanh thêm 1,000 bình luận từ các top video tiếp theo"
-                      >
-                        {batchCrawlingComments ? (
-                          <Loader2 size={13} className="animate-spin" />
-                        ) : (
-                          <RefreshCw size={13} />
-                        )}
-                        <span>Cào Thêm 1,000 Cmt</span>
-                      </button>
+                  const copyClapbackHelper = (text: string, id: string) => {
+                    navigator.clipboard.writeText(text);
+                    setCopiedClapbackId(id);
+                    setTimeout(() => setCopiedClapbackId(null), 2500);
+                  };
 
-                      <button
-                        onClick={() => handleBatchCrawlComments(true)}
-                        disabled={batchCrawlingComments}
-                        className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
-                        title="Cào quét toàn bộ bình luận trên tất cả các video trong ngách"
-                      >
-                        {batchCrawlingComments ? (
-                          <>
-                            <Loader2 size={13} className="animate-spin" />
-                            <span>Đang quét toàn ngách...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Zap size={13} className="text-yellow-300" />
-                            <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Cmt)</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Comments Crawl Progress Bar */}
-                  {data?.comment_stats && (
-                    <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-300">Tiến độ cào bình luận toàn ngách:</span>
-                        <span className="font-mono text-purple-400 font-bold">
-                          {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
-                        </span>
-                      </div>
-                      <div className="w-full md:w-56 bg-slate-800 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* VOC Summary Quote */}
-                  {masterAI.voc_summary && (
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-violet-900/40 text-xs md:text-sm text-violet-200 leading-relaxed font-medium">
-                      💡 <strong>Đúc kết từ bình luận:</strong> {masterAI.voc_summary}
-                    </div>
-                  )}
-
-                  {/* Topic Clusters Distribution */}
-                  {masterAI.customer_interests && masterAI.customer_interests.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
-                        📊 Mức Độ Quan Tâm Theo Chủ Đề (Top Comment Themes)
-                      </h4>
-                      <div className="grid gap-2.5">
-                        {masterAI.customer_interests.map((t, idx) => (
-                          <div key={idx} className="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
-                            <div className="flex items-center justify-between text-xs mb-1.5">
-                              <span className="font-semibold text-slate-200">{t.topic}</span>
-                              <span className="font-mono text-purple-400 font-bold">{t.percentage}% ({t.count} cmt)</span>
-                            </div>
-                            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
-                              <div
-                                className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all"
-                                style={{ width: `${Math.min(100, Math.max(5, t.percentage * 2))}%` }}
-                              />
-                            </div>
+                  return (
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-7">
+                      {/* Header & Batch Crawl Actions */}
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                        <div>
+                          <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-1">
+                            <MessageSquare size={16} />
+                            <span>Trung Tâm Phân Tích Tâm Lý Khách Hàng (Advanced VoC Intelligence)</span>
+                            <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                              6-Pillar Framework
+                            </span>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                          <h3 className="text-xl md:text-2xl font-black text-white">
+                            Tiếng Nói Khách Hàng &amp; Ma Trận Rào Cản Tâm Lý ({totalCommentsAnalyzed.toLocaleString()} Bình Luận)
+                          </h3>
+                          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+                            Khảo sát sâu sắc từ hàng ngàn bình luận thực tế trên TikTok. Bóc tách chính xác những băn khoăn về bám bụi, nguy cơ đổ ngã trẻ nhỏ/chó mèo, hoài nghi lá nhựa bóng và cuộc chiến giá với Pottery Barn / Costco.
+                          </p>
+                        </div>
 
-                  {/* Two Columns: Buying Desires vs Top Objections */}
-                  <div className="grid md:grid-cols-2 gap-4 pt-2">
-                    {/* Buying Desires */}
-                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
-                      <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
-                        <ShoppingCart size={15} />
-                        <span>Khán Giả Muốn Mua Gì Nhiều Nhất (Buying Desires &amp; Links)</span>
-                      </div>
-                      <div className="space-y-2">
-                        {masterAI.buying_desires && masterAI.buying_desires.length > 0 ? (
-                          masterAI.buying_desires.slice(0, 5).map((b, idx) => (
-                            <div key={idx} className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
-                              <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                                <span className="font-semibold text-emerald-400">@{b.username || "khách hàng"}</span>
-                                {b.likes > 0 && <span className="text-pink-400">❤️ {b.likes} tym</span>}
-                              </div>
-                              <p className="italic text-slate-200">"{b.text}"</p>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-slate-500 italic">Chưa có câu hỏi mua hàng trích xuất.</p>
-                        )}
-                      </div>
-                    </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            onClick={() => handleBatchCrawlComments(false)}
+                            disabled={batchCrawlingComments}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                            title="Cào nhanh thêm 1,000 bình luận từ các top video tiếp theo"
+                          >
+                            {batchCrawlingComments ? (
+                              <Loader2 size={13} className="animate-spin" />
+                            ) : (
+                              <RefreshCw size={13} />
+                            )}
+                            <span>Cào Thêm 1,000 Cmt</span>
+                          </button>
 
-                    {/* Top Objections */}
-                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
-                      <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-3">
-                        <ShieldAlert size={15} />
-                        <span>Rào Cản &amp; Nghi Ngại Lớn Nhất (Objections / Doubts)</span>
+                          <button
+                            onClick={() => handleBatchCrawlComments(true)}
+                            disabled={batchCrawlingComments}
+                            className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
+                            title="Cào quét toàn bộ bình luận trên tất cả các video trong ngách"
+                          >
+                            {batchCrawlingComments ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin" />
+                                <span>Đang quét toàn ngách...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap size={13} className="text-yellow-300" />
+                                <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Cmt)</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        {masterAI.top_objections && masterAI.top_objections.length > 0 ? (
-                          masterAI.top_objections.slice(0, 5).map((o, idx) => (
-                            <div key={idx} className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
-                              <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-                                <span className="font-semibold text-amber-400">@{o.username || "khách hàng"}</span>
-                                {o.likes > 0 && <span className="text-pink-400">❤️ {o.likes} tym</span>}
+
+                      {/* Comments Crawl Progress Bar */}
+                      {data?.comment_stats && (
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-300">Tiến độ cào dữ liệu bình luận toàn ngách:</span>
+                            <span className="font-mono text-purple-400 font-bold">
+                              {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
+                            </span>
+                          </div>
+                          <div className="w-full md:w-64 bg-slate-800 rounded-full h-2.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500"
+                              style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Summary callout */}
+                      {masterAI.voc_summary && (
+                        <div className="bg-gradient-to-r from-violet-950/40 to-slate-950 p-4 rounded-2xl border border-violet-800/40 text-xs md:text-sm text-violet-200 leading-relaxed font-medium">
+                          💡 <strong>Tư duy chiến lược từ bình luận:</strong> {masterAI.voc_summary}
+                        </div>
+                      )}
+
+                      {/* ------------------------------------------------------------- */}
+                      {/* 1. MA TRẬN 6 TRỤ CỘT TÂM LÝ KHÁCH HÀNG (6-PILLAR MATRIX) */}
+                      {/* ------------------------------------------------------------- */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                              <Target size={16} className="text-pink-400" />
+                              <span>Ma Trận 6 Trụ Cột Tâm Lý Khách Hàng (6-Pillar Consumer Psychology)</span>
+                            </h4>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Đo lường định lượng tỷ trọng từng nhóm băn khoăn &amp; trích xuất nguyên văn bình luận của người mua.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {Object.values(pillars).map((p: any, pIdx: number) => {
+                            let borderTheme = "border-rose-500/30 hover:border-rose-500/60";
+                            let badgeTheme = "bg-rose-950/80 text-rose-300 border-rose-700/60";
+                            let barTheme = "from-rose-500 to-pink-600";
+                            if (p.color === "amber") {
+                              borderTheme = "border-amber-500/30 hover:border-amber-500/60";
+                              badgeTheme = "bg-amber-950/80 text-amber-300 border-amber-700/60";
+                              barTheme = "from-amber-500 to-orange-600";
+                            } else if (p.color === "violet") {
+                              borderTheme = "border-violet-500/30 hover:border-violet-500/60";
+                              badgeTheme = "bg-violet-950/80 text-violet-300 border-violet-700/60";
+                              barTheme = "from-violet-500 to-purple-600";
+                            } else if (p.color === "sky") {
+                              borderTheme = "border-sky-500/30 hover:border-sky-500/60";
+                              badgeTheme = "bg-sky-950/80 text-sky-300 border-sky-700/60";
+                              barTheme = "from-sky-500 to-blue-600";
+                            } else if (p.color === "emerald") {
+                              borderTheme = "border-emerald-500/30 hover:border-emerald-500/60";
+                              badgeTheme = "bg-emerald-950/80 text-emerald-300 border-emerald-700/60";
+                              barTheme = "from-emerald-500 to-teal-600";
+                            } else if (p.color === "pink") {
+                              borderTheme = "border-pink-500/30 hover:border-pink-500/60";
+                              badgeTheme = "bg-pink-950/80 text-pink-300 border-pink-700/60";
+                              barTheme = "from-pink-500 to-rose-600";
+                            }
+
+                            return (
+                              <div
+                                key={pIdx}
+                                className={`bg-slate-950 p-5 rounded-3xl border ${borderTheme} flex flex-col justify-between space-y-3 transition shadow-lg`}
+                              >
+                                <div className="space-y-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badgeTheme}`}>
+                                      {p.badge}
+                                    </span>
+                                    <span className="text-xs font-mono font-bold text-white">
+                                      {p.percentage}% ({p.count} cmt)
+                                    </span>
+                                  </div>
+
+                                  <h5 className="text-sm font-bold text-white leading-snug">{p.title}</h5>
+
+                                  <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                                    <div
+                                      className={`bg-gradient-to-r ${barTheme} h-full rounded-full`}
+                                      style={{ width: `${Math.min(100, Math.max(6, p.percentage * 2.5))}%` }}
+                                    />
+                                  </div>
+
+                                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                                    {p.description}
+                                  </p>
+
+                                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] text-amber-300/90 leading-relaxed">
+                                    🧠 <strong>Động lực tâm lý:</strong> {p.psychological_driver}
+                                  </div>
+                                </div>
+
+                                {/* Sample real quotes */}
+                                <div className="pt-2 border-t border-slate-900 space-y-1.5">
+                                  <span className="text-[10px] font-semibold text-slate-500 block">
+                                    Bình luận tiêu biểu từ người mua:
+                                  </span>
+                                  {(p.top_quotes || []).slice(0, 2).map((q: any, qIdx: number) => (
+                                    <div key={qIdx} className="bg-slate-900/60 p-2 rounded-xl text-xs space-y-0.5">
+                                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                        <span className="font-mono text-slate-400">@{q.username}</span>
+                                        {q.likes > 0 && <span className="text-pink-400">❤️ {q.likes}</span>}
+                                      </div>
+                                      <p className="text-[11px] text-slate-200 italic line-clamp-2">
+                                        &ldquo;{q.text}&rdquo;
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                              <p className="italic text-slate-200">"{o.text}"</p>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ------------------------------------------------------------- */}
+                      {/* 2. CHỈ DẪN KỸ THUẬT SOURCING & CẢI TIẾN SẢN PHẨM (R&D) */}
+                      {/* ------------------------------------------------------------- */}
+                      <div className="bg-slate-950 p-6 rounded-3xl border border-violet-800/40 space-y-4">
+                        <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                          <Brain size={16} />
+                          <span>Chỉ Dẫn Kỹ Thuật Khi Làm Việc Với Xưởng / Sourcing Sản Phẩm (Product R&amp;D Directives)</span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Những cải tiến kỹ thuật cụ thể giúp bạn làm việc trực tiếp với nhà cung cấp/nhà xưởng để giải quyết triệt để rào cản người mua và tối ưu doanh số.
+                        </p>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                          {sourcingRecs.map((rec: any, rIdx: number) => (
+                            <div key={rIdx} className="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 space-y-2 flex flex-col justify-between">
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-bold text-violet-400 uppercase bg-violet-950/60 border border-violet-800/60 px-2 py-0.5 rounded-full inline-block">
+                                  {rec.pillar}
+                                </span>
+                                <div className="text-xs text-rose-300/90 font-medium">
+                                  ⚠️ <strong>Vấn đề từ comment:</strong> {rec.problem}
+                                </div>
+                                <div className="text-xs text-emerald-300 font-semibold bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-800/40 leading-relaxed">
+                                  🛠️ <strong>Giải pháp kỹ thuật:</strong> {rec.technical_solution}
+                                </div>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400">
+                                📈 <strong>Tác động thương mại:</strong> {rec.commercial_impact}
+                              </div>
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-xs text-slate-500 italic">Chưa có rào cản phản đối trích xuất.</p>
-                        )}
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* ------------------------------------------------------------- */}
+                      {/* 3. 5 KỊCH BẢN VIDEO BẺ RÀO CẢN (OBJECTION-BUSTER CLAPBACK ADS) */}
+                      {/* ------------------------------------------------------------- */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                              <Flame size={16} className="text-amber-400" />
+                              <span>5 Kịch Bản Video "Bẻ Rào Cản" (Objection-Buster Clapback Ad Scripts)</span>
+                            </h4>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Lấy trực tiếp các comment nghi ngại nhiều tym nhất dán góc màn hình làm Hook 1s đầu. Công thức đạt tỷ lệ chuyển đổi cao nhất trên TikTok.
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {clapbackScripts.map((s: any, sIdx: number) => {
+                            const fullScript = `[Hook 0-3s]: ${s.hook_0_3s}\n[Proof 4-15s]: ${s.proof_4_12s || s.proof_4_15s || s.proof_4_16s || s.proof_4_18s}\n[CTA]: ${s.cta_13_18s || s.cta_16_22s || s.cta_19_25s || s.cta_15_20s || s.cta_17_24s}`;
+                            return (
+                              <div
+                                key={sIdx}
+                                className="bg-slate-950 p-5 rounded-3xl border border-slate-800 hover:border-amber-500/40 transition flex flex-col justify-between space-y-3 shadow-lg group"
+                              >
+                                <div className="space-y-3">
+                                  {/* Simulated TikTok Comment Sticker */}
+                                  <div className="bg-slate-900 p-3 rounded-2xl border border-slate-700/80 shadow-md">
+                                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                                      <span className="font-bold text-pink-400">💬 TikTok Comment Sticker (0-1s Hook)</span>
+                                      <span className="text-slate-500">❤️ {s.comment_likes} tym</span>
+                                    </div>
+                                    <p className="text-xs font-semibold text-white italic">
+                                      &ldquo;{s.sticker_comment}&rdquo;
+                                    </p>
+                                  </div>
+
+                                  <div className="flex items-center justify-between">
+                                    <h5 className="text-xs font-bold text-amber-400">{s.concept_title}</h5>
+                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-full">
+                                      {s.duration}
+                                    </span>
+                                  </div>
+
+                                  {/* Script Breakdown */}
+                                  <div className="space-y-2 text-xs">
+                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
+                                      <span className="text-[10px] font-bold text-pink-400 uppercase block">0 - 3s: Hook Mở Đầu</span>
+                                      <p className="text-[11px] text-slate-200 leading-relaxed">{s.hook_0_3s}</p>
+                                    </div>
+
+                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
+                                      <span className="text-[10px] font-bold text-emerald-400 uppercase block">4 - 15s: Chứng Minh Bằng Hành Động</span>
+                                      <p className="text-[11px] text-slate-200 leading-relaxed">
+                                        {s.proof_4_12s || s.proof_4_15s || s.proof_4_16s || s.proof_4_18s}
+                                      </p>
+                                    </div>
+
+                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
+                                      <span className="text-[10px] font-bold text-purple-400 uppercase block">CTA Kêu Gọi Mua</span>
+                                      <p className="text-[11px] text-slate-200 leading-relaxed">
+                                        {s.cta_13_18s || s.cta_16_22s || s.cta_19_25s || s.cta_15_20s || s.cta_17_24s}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <button
+                                  onClick={() => copyClapbackHelper(fullScript, s.id)}
+                                  className="w-full py-2 bg-slate-900 hover:bg-amber-600 text-slate-300 hover:text-white font-semibold rounded-xl text-xs transition flex items-center justify-center gap-1.5 border border-slate-800 cursor-pointer mt-2"
+                                >
+                                  {copiedClapbackId === s.id ? (
+                                    <span className="text-emerald-300 font-bold flex items-center gap-1">
+                                      <Check size={13} /> Đã copy kịch bản!
+                                    </span>
+                                  ) : (
+                                    <>
+                                      <Copy size={13} />
+                                      <span>Copy Kịch Bản Này</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* ------------------------------------------------------------- */}
+                      {/* 4. BỘ LỌC ĐỌC COMMENT GỐC THEO TRỤ CỘT (COMMENT EXPLORER) */}
+                      {/* ------------------------------------------------------------- */}
+                      <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                          <div>
+                            <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                              <Search size={14} />
+                              <span>Kho Khai Thác Bình Luận Gốc (Raw Comment Explorer)</span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Đọc trực tiếp các bình luận thực tế theo từng nhóm vấn đề để thấu hiểu ngôn ngữ của khách hàng.
+                            </p>
+                          </div>
+
+                          {/* Filter Pills */}
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {[
+                              { id: "all", label: "Tất cả bình luận" },
+                              { id: "physical_friction", label: "⚠️ Bám bụi & Đổ ngã" },
+                              { id: "aesthetic_skepticism", label: "👁️ Lá nhựa bóng" },
+                              { id: "competitor_comparison", label: "🏷️ So sánh Pottery/Costco" },
+                              { id: "decision_confusion", label: "📐 Chọn size & chậu" },
+                              { id: "styling_hacks", label: "✂️ Uốn cành & rêu" },
+                              { id: "emotional_triggers", label: "❤️ Thúc đẩy mua" }
+                            ].map((tab) => (
+                              <button
+                                key={tab.id}
+                                onClick={() => setVocPillarFilter(tab.id)}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-medium transition cursor-pointer ${
+                                  vocPillarFilter === tab.id
+                                    ? "bg-violet-600 text-white font-bold shadow"
+                                    : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                                }`}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Render comments list */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
+                          {(() => {
+                            let displayComments: any[] = [];
+                            if (vocPillarFilter === "all") {
+                              Object.values(pillars).forEach((p: any) => {
+                                displayComments.push(...(p.top_quotes || []));
+                              });
+                            } else if (pillars[vocPillarFilter]) {
+                              displayComments = pillars[vocPillarFilter].top_quotes || [];
+                            }
+
+                            // Deduplicate by text
+                            const seen = new Set();
+                            displayComments = displayComments.filter((c: any) => {
+                              if (seen.has(c.text)) return false;
+                              seen.add(c.text);
+                              return true;
+                            });
+
+                            return displayComments.map((c: any, cIdx: number) => (
+                              <div
+                                key={cIdx}
+                                className="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800/80 text-xs space-y-1.5 flex flex-col justify-between"
+                              >
+                                <p className="text-slate-200 italic font-medium leading-relaxed">
+                                  &ldquo;{c.text}&rdquo;
+                                </p>
+                                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-800/50">
+                                  <span className="font-mono text-slate-400">@{c.username || "khách hàng"}</span>
+                                  {c.likes > 0 && <span className="text-pink-400 font-bold">❤️ {c.likes} tym</span>}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  );
+                })()}
 
                 <div className="grid md:grid-cols-2 gap-5">
                   {/* Non-Negotiable Viral Triggers */}

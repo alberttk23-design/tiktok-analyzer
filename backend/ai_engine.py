@@ -482,6 +482,9 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần (gắn kết c
     data["top_objections"] = top_objections
     data["voc_summary"] = voc_summary
 
+    import backend.voc_engine as voc_engine
+    data["voc_deep"] = voc_engine.analyze_voc_deep(keyword)
+
     db.save_master_analysis(keyword, data, engine="ollama")
     print(f"[AI Engine] Master analysis saved for '{keyword}' with {len(raw_comments)} comments analyzed.")
     return data
@@ -634,6 +637,9 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ ĐẲNG CẤP CHIẾN LƯỢC DTC 
     gemini_data["buying_desires"] = buying_desires
     gemini_data["top_objections"] = top_objections
     gemini_data["voc_summary"] = voc_summary
+
+    import backend.voc_engine as voc_engine
+    gemini_data["voc_deep"] = voc_engine.analyze_voc_deep(keyword)
 
     db.save_master_analysis(keyword, gemini_data, engine="gemini")
     print(f"[AI Engine] Gemini 3.8 Flash High Master analysis saved for '{keyword}'.")

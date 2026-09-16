@@ -900,6 +900,10 @@ def get_results_by_keyword(keyword=None):
     audio_intelligence = get_full_audio_intelligence(keyword)
     audio_summary = audio_intelligence.get("summary") or get_niche_audio_summary(keyword)
 
+    # Get Advanced 6-Pillar VoC Consumer Intelligence
+    import backend.voc_engine as voc_engine
+    voc_deep = voc_engine.analyze_voc_deep(keyword)
+
     # Auto-backfill reviews for any videos that were interrupted or crawled without analysis
     existing_reviewed_vids = {r.get("video_id") for r in reviews}
     missing_vids = [v for v in videos if v.get("video_id") not in existing_reviewed_vids]
@@ -923,6 +927,7 @@ def get_results_by_keyword(keyword=None):
         "master_analyses": master_analyses,
         "audio_summary": audio_summary,
         "audio_intelligence": audio_intelligence,
+        "voc_deep": voc_deep,
         "comment_stats": {
             "total_tiktok_comments": total_tiktok_comments,
             "total_crawled_comments": total_crawled_comments,

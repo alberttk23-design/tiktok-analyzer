@@ -189,6 +189,15 @@ def get_audio_intelligence_endpoint(keyword: Optional[str] = Query(None)):
     return db.get_full_audio_intelligence(kw)
 
 
+@app.get("/api/voc-deep")
+def get_voc_deep_endpoint(keyword: Optional[str] = Query(None)):
+    """Get full-featured 6-Pillar Consumer Psychology & VoC Intelligence."""
+    kw = keyword or db.get_latest_keyword()
+    import backend.voc_engine as voc_engine
+    return voc_engine.analyze_voc_deep(kw)
+
+
+
 
 @app.get("/api/keywords")
 def get_keywords():
