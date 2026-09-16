@@ -216,6 +216,25 @@ def init_db():
         except Exception as e:
             print(f"[DB Migration Notice] master_analysis v2 migration: {e}")
 
+    # Creators table for KOC Discovery & Booking CRM
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS creators (
+        creator TEXT PRIMARY KEY,
+        nickname TEXT,
+        follower_count INTEGER DEFAULT 0,
+        video_count INTEGER DEFAULT 0,
+        heart_count INTEGER DEFAULT 0,
+        signature TEXT,
+        email TEXT,
+        verified BOOLEAN DEFAULT 0,
+        avatar_url TEXT,
+        booking_status TEXT DEFAULT 'new',
+        booking_notes TEXT DEFAULT '',
+        booking_price REAL DEFAULT 0,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -725,6 +744,220 @@ def get_results_by_keyword(keyword=None):
         "master_analysis": master_analysis,
         "master_analyses": master_analyses
     }
+
+
+def upsert_creator(data: dict):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO creators (
+        creator, nickname, follower_count, video_count, heart_count,
+        signature, email, verified, avatar_url, updated_at
+    ) VALUES (
+        :creator, :nickname, :follower_count, :video_count, :heart_count,
+        :signature, :email, :verified, :avatar_url, CURRENT_TIMESTAMP
+    )
+    ON CONFLICT(creator) DO UPDATE SET
+        nickname=excluded.nickname,
+        follower_count=excluded.follower_count,
+        video_count=excluded.video_count,
+        heart_count=excluded.heart_count,
+        signature=excluded.signature,
+        email=CASE WHEN excluded.email != '' THEN excluded.email ELSE creators.email END,
+        verified=excluded.verified,
+        avatar_url=excluded.avatar_url,
+        updated_at=CURRENT_TIMESTAMP
+    """, data)
+    
+    f_count = int(data.get("follower_count") or 0)
+    if f_count > 0:
+        cursor.execute("UPDATE videos SET creator_followers = ? WHERE creator = ?", (f_count, data["creator"]))
+        
+    conn.commit()
+    conn.close()
+
+
+def update_creator_booking(creator: str, booking_status: str, booking_notes: str, booking_price: float = 0.0):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR IGNORE INTO creators (creator) VALUES (?)", (creator,))
+    cursor.execute("""
+    UPDATE creators SET
+        booking_status = ?,
+        booking_notes = ?,
+        booking_price = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE creator = ?
+    """, (booking_status, booking_notes, booking_price, creator))
+    conn.commit()
+    conn.close()
+
+
+def get_creator(creator: str):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM creators WHERE creator = ?", (creator,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_creators_with_analytics(keyword: Optional[str] = None):
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    if keyword:
+        cursor.execute("""
+        SELECT 
+            creator,
+            COUNT(*) as videos_in_niche,
+            SUM(views) as total_views,
+            MAX(views) as max_views,
+            ROUND(AVG(views)) as avg_views,
+            MAX(likes) as max_likes,
+            MAX(saves) as max_saves,
+            MAX(comments) as max_comments,
+            MAX(score) as max_score
+        FROM videos
+        WHERE keyword = ?
+        GROUP BY creator
+        ORDER BY max_views DESC
+        """, (keyword,))
+    else:
+        cursor.execute("""
+        SELECT 
+            creator,
+            COUNT(*) as videos_in_niche,
+            SUM(views) as total_views,
+            MAX(views) as max_views,
+            ROUND(AVG(views)) as avg_views,
+            MAX(likes) as max_likes,
+            MAX(saves) as max_saves,
+            MAX(comments) as max_comments,
+            MAX(score) as max_score
+        FROM videos
+        GROUP BY creator
+        ORDER BY max_views DESC
+        """)
+    
+    grouped_rows = [dict(r) for r in cursor.fetchall()]
+    
+    cursor.execute("SELECT * FROM creators")
+    creators_meta = {r["creator"]: dict(r) for r in cursor.fetchall()}
+    
+    if keyword:
+        cursor.execute("""
+        SELECT video_id, creator, views, likes, saves, score, caption, url
+        FROM videos
+        WHERE keyword = ?
+        ORDER BY views DESC
+        """, (keyword,))
+    else:
+        cursor.execute("""
+        SELECT video_id, creator, views, likes, saves, score, caption, url
+        FROM videos
+        ORDER BY views DESC
+        """)
+        
+    all_videos = cursor.fetchall()
+    creator_top_videos = {}
+    for v in all_videos:
+        c_name = v["creator"]
+        if c_name not in creator_top_videos:
+            creator_top_videos[c_name] = []
+        if len(creator_top_videos[c_name]) < 3:
+            creator_top_videos[c_name].append(dict(v))
+            
+    conn.close()
+    
+    results = []
+    for g in grouped_rows:
+        c_name = g["creator"]
+        meta = creators_meta.get(c_name, {})
+        follower_count = int(meta.get("follower_count") or 0)
+        max_views = int(g["max_views"] or 0)
+        
+        if follower_count > 0:
+            multiplier = round(max_views / follower_count, 1)
+        else:
+            multiplier = 0.0
+            
+        # Determine Tier
+        if follower_count == 0:
+            tier = "unverified"
+            tier_label = "🔍 Cần quét Profile"
+            tier_badge_color = "slate"
+            tier_desc = "Chưa có thông tin số follower trực tiếp"
+            recommendation = "Bấm 'Quét Profile' để phân tích đòn bẩy"
+        elif multiplier >= 10.0 and follower_count < 20000:
+            tier = "hidden_gem"
+            tier_label = f"💎 Hidden Gem (Outlier {multiplier}x)"
+            tier_badge_color = "emerald"
+            tier_desc = f"Ít follow ({follower_count:,}) nhưng view bùng nổ {multiplier}x"
+            recommendation = "⚡ Học kịch bản ngay / Booking giá hời ($20-$80)"
+        elif 20000 <= follower_count <= 120000 and max_views >= 20000:
+            tier = "real_traffic"
+            tier_label = "🌿 Real Niche Traffic"
+            tier_badge_color = "teal"
+            tier_desc = f"Traffic thật ngách Decor ({follower_count:,} flw, {multiplier}x đòn bẩy)"
+            recommendation = "Hợp tác Review chuyên sâu / Social Proof uy tín"
+        elif multiplier >= 3.0 and follower_count < 60000:
+            tier = "rising_star"
+            tier_label = f"🚀 Rising Star ({multiplier}x)"
+            tier_badge_color = "indigo"
+            tier_desc = f"Kênh tăng trưởng mạnh ({follower_count:,} flw)"
+            recommendation = "Booking gắn TikTok Shop / Đẩy mạnh Affiliate"
+        elif follower_count > 120000:
+            tier = "macro_authority"
+            tier_label = "👑 Macro Authority"
+            tier_badge_color = "amber"
+            tier_desc = f"Tài khoản lớn / Thương hiệu ({follower_count:,} flw)"
+            recommendation = "Chiến dịch Branding nhận diện diện rộng"
+        elif follower_count > 40000 and multiplier < 0.1 and max_views < 5000:
+            tier = "low_engagement"
+            tier_label = "⚠️ Low Engagement Risk"
+            tier_badge_color = "rose"
+            tier_desc = "Follower cao nhưng view thấp (nguy cơ flop / bot)"
+            recommendation = "Cảnh báo: Không khuyến nghị booking"
+        else:
+            tier = "standard"
+            tier_label = "🎯 Standard Creator"
+            tier_badge_color = "blue"
+            tier_desc = f"KOC tiềm năng ({follower_count:,} flw, {multiplier}x)"
+            recommendation = "Gửi hàng mẫu trải nghiệm sản phẩm"
+            
+        results.append({
+            "creator": c_name,
+            "nickname": meta.get("nickname") or c_name,
+            "avatar_url": meta.get("avatar_url") or "",
+            "follower_count": follower_count,
+            "video_count": int(meta.get("video_count") or 0),
+            "heart_count": int(meta.get("heart_count") or 0),
+            "signature": meta.get("signature") or "",
+            "email": meta.get("email") or "",
+            "verified": bool(meta.get("verified") or 0),
+            "booking_status": meta.get("booking_status") or "new",
+            "booking_notes": meta.get("booking_notes") or "",
+            "booking_price": float(meta.get("booking_price") or 0.0),
+            "videos_in_niche": g["videos_in_niche"],
+            "total_views": g["total_views"],
+            "max_views": g["max_views"],
+            "avg_views": g["avg_views"],
+            "max_likes": g["max_likes"],
+            "max_saves": g["max_saves"],
+            "max_comments": g["max_comments"],
+            "max_score": g["max_score"],
+            "viral_multiplier": multiplier,
+            "tier": tier,
+            "tier_label": tier_label,
+            "tier_badge_color": tier_badge_color,
+            "tier_desc": tier_desc,
+            "recommendation": recommendation,
+            "top_videos": creator_top_videos.get(c_name, []),
+            "profile_url": f"https://www.tiktok.com/@{c_name}"
+        })
+        
+    return results
 
 
 # Auto-initialize database schema

@@ -2,6 +2,7 @@ import csv
 import io
 import json
 import uuid
+import asyncio
 from typing import Optional
 from pathlib import Path
 from collections import Counter
@@ -55,6 +56,17 @@ class MasterAnalysisRequest(BaseModel):
 class MultimodalBatchRequest(BaseModel):
     keyword: str
     top_n: int = 5
+
+
+class CreatorBookingRequest(BaseModel):
+    booking_status: str = "new"
+    booking_notes: str = ""
+    booking_price: float = 0.0
+
+
+class CreatorBatchEnrichRequest(BaseModel):
+    keyword: Optional[str] = None
+    max_count: int = 20
 
 
 
@@ -504,6 +516,62 @@ def analyze_top_multimodal_endpoint(req: MultimodalBatchRequest, background_task
         "message": f"Bắt đầu chuỗi Multimodal AI cho Top {req.top_n} video từ khóa '{req.keyword}'"
     }
 
+
+@app.get("/api/creators")
+def get_creators_endpoint(keyword: Optional[str] = None):
+    """Retrieve creators with analytics, tier classification, and booking status."""
+    creators = db.get_creators_with_analytics(keyword)
+    return {
+        "keyword": keyword,
+        "total_creators": len(creators),
+        "creators": creators
+    }
+
+
+@app.post("/api/creators/{creator}/enrich")
+async def enrich_single_creator_endpoint(creator: str):
+    """Scrape live TikTok profile for a single creator (followers, video count, bio, email)."""
+    import backend.creator_service as creator_service
+    res = await creator_service.scrape_single_creator(creator)
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    return {"status": "success", "creator": creator, "data": res}
+
+
+@app.post("/api/creators/{creator}/booking")
+def update_creator_booking_endpoint(creator: str, req: CreatorBookingRequest):
+    """Update creator booking status, notes, and agreed/quoted price."""
+    db.update_creator_booking(
+        creator=creator,
+        booking_status=req.booking_status,
+        booking_notes=req.booking_notes,
+        booking_price=req.booking_price
+    )
+    return {"status": "success", "creator": creator, "booking": req.dict()}
+
+
+@app.post("/api/creators/batch-enrich")
+def batch_enrich_creators_endpoint(req: CreatorBatchEnrichRequest, background_tasks: BackgroundTasks):
+    """Trigger background batch profile scraping for top creators."""
+    import backend.creator_service as creator_service
+    job_id = str(uuid.uuid4())[:8]
+    kw = req.keyword or "all"
+    db.create_job(job_id, kw)
+
+    def run_enrich():
+        try:
+            db.update_job(job_id, status="processing", message=f"Đang quét live profile & email cho top {req.max_count} creator...")
+            asyncio.run(creator_service.batch_enrich_creators(req.keyword, max_count=req.max_count))
+            db.update_job(job_id, status="completed", progress=100, message=f"Đã cập nhật live profile cho top {req.max_count} creator!")
+        except Exception as e:
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_enrich)
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "message": f"Bắt đầu quét live profile cho top {req.max_count} KOC"
+    }
 
 
 if __name__ == "__main__":

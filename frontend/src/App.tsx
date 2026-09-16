@@ -39,6 +39,10 @@ import {
   Filter,
   ShoppingCart,
   Key,
+  Users,
+  Mail,
+  Send,
+  Award,
 } from "lucide-react";
 
 interface VideoItem {
@@ -152,6 +156,48 @@ interface JobStatus {
   new_videos_count: number;
 }
 
+interface CreatorTopVideo {
+  video_id: string;
+  creator: string;
+  views: number;
+  likes: number;
+  saves: number;
+  score: number;
+  caption: string;
+  url: string;
+}
+
+interface CreatorItem {
+  creator: string;
+  nickname: string;
+  avatar_url: string;
+  follower_count: number;
+  video_count: number;
+  heart_count: number;
+  signature: string;
+  email: string;
+  verified: boolean;
+  booking_status: string;
+  booking_notes: string;
+  booking_price: number;
+  videos_in_niche: number;
+  total_views: number;
+  max_views: number;
+  avg_views: number;
+  max_likes: number;
+  max_saves: number;
+  max_comments: number;
+  max_score: number;
+  viral_multiplier: number;
+  tier: string;
+  tier_label: string;
+  tier_badge_color: string;
+  tier_desc: string;
+  recommendation: string;
+  top_videos: CreatorTopVideo[];
+  profile_url: string;
+}
+
 const API_BASE = "http://127.0.0.1:8000";
 
 function App() {
@@ -171,7 +217,7 @@ function App() {
   const [keywordsList, setKeywordsList] = useState<{ keyword: string; video_count: number }[]>([]);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database">("reviews");
+  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc">("reviews");
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -198,7 +244,99 @@ function App() {
   const [minViewsFilter, setMinViewsFilter] = useState<number>(0);
   const [batchCrawlingComments, setBatchCrawlingComments] = useState<boolean>(false);
 
+  // Creator Intelligence & Booking states
+  const [creatorsList, setCreatorsList] = useState<CreatorItem[]>([]);
+  const [loadingCreators, setLoadingCreators] = useState<boolean>(false);
+  const [enrichingCreator, setEnrichingCreator] = useState<string | null>(null);
+  const [batchEnriching, setBatchEnriching] = useState<boolean>(false);
+  const [kocTierFilter, setKocTierFilter] = useState<string>("all");
+  const [kocBookingFilter, setKocBookingFilter] = useState<string>("all");
+  const [kocSearchQuery, setKocSearchQuery] = useState<string>("");
+  const [kocSortBy, setKocSortBy] = useState<"multiplier" | "views" | "followers" | "videos">("multiplier");
+  const [kocSortOrder, setKocSortOrder] = useState<"desc" | "asc">("desc");
+
   const pollingRef = useRef<any>(null);
+
+  async function loadCreators(targetKeyword?: string) {
+    const kw = targetKeyword || keyword;
+    if (!kw) return;
+    setLoadingCreators(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/creators?keyword=${encodeURIComponent(kw)}`);
+      if (res.ok) {
+        const json = await res.json();
+        setCreatorsList(json.creators || []);
+      }
+    } catch (e) {
+      console.error("Failed to load creators:", e);
+    } finally {
+      setLoadingCreators(false);
+    }
+  }
+
+  async function handleEnrichSingleCreator(creatorName: string) {
+    setEnrichingCreator(creatorName);
+    try {
+      const res = await fetch(`${API_BASE}/api/creators/${encodeURIComponent(creatorName)}/enrich`, {
+        method: "POST",
+      });
+      if (res.ok) {
+        await loadCreators();
+      }
+    } catch (e) {
+      console.error("Error enriching creator:", e);
+    } finally {
+      setEnrichingCreator(null);
+    }
+  }
+
+  async function handleBatchEnrichCreators() {
+    if (batchEnriching) return;
+    setBatchEnriching(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/creators/batch-enrich`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword, max_count: 20 }),
+      });
+      if (res.ok) {
+        setTimeout(() => {
+          loadCreators();
+          setBatchEnriching(false);
+        }, 10000);
+      } else {
+        setBatchEnriching(false);
+      }
+    } catch (e) {
+      console.error("Batch enrich error:", e);
+      setBatchEnriching(false);
+    }
+  }
+
+  async function handleUpdateBooking(creatorName: string, status: string, notes: string, price: number) {
+    try {
+      const res = await fetch(`${API_BASE}/api/creators/${encodeURIComponent(creatorName)}/booking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_status: status,
+          booking_notes: notes,
+          booking_price: price,
+        }),
+      });
+      if (res.ok) {
+        setCreatorsList((prev) =>
+          prev.map((c) =>
+            c.creator === creatorName
+              ? { ...c, booking_status: status, booking_notes: notes, booking_price: price }
+              : c
+          )
+        );
+      }
+    } catch (e) {
+      console.error("Booking update error:", e);
+    }
+  }
 
   async function loadData(targetKeyword?: string) {
     try {
@@ -214,6 +352,8 @@ function App() {
           setKeyword(json.keyword);
         }
       }
+
+      loadCreators(kw);
 
       const patUrl = `${API_BASE}/api/patterns?keyword=${encodeURIComponent(kw)}`;
       const patRes = await fetch(patUrl);
@@ -635,6 +775,69 @@ ${data.master_analysis.summary}\n`;
     return list;
   }, [data?.videos, sortBy, sortOrder, tableSearch, minViewsFilter]);
 
+  const creatorMap = useMemo(() => {
+    const map = new Map<string, CreatorItem>();
+    for (const c of creatorsList) {
+      map.set(c.creator, c);
+    }
+    return map;
+  }, [creatorsList]);
+
+  const filteredCreators = useMemo(() => {
+    let list = [...creatorsList];
+
+    if (kocSearchQuery.trim()) {
+      const q = kocSearchQuery.toLowerCase().trim();
+      list = list.filter(
+        (c) =>
+          c.creator.toLowerCase().includes(q) ||
+          c.nickname.toLowerCase().includes(q) ||
+          c.signature.toLowerCase().includes(q) ||
+          c.email.toLowerCase().includes(q)
+      );
+    }
+
+    if (kocTierFilter !== "all") {
+      list = list.filter((c) => c.tier === kocTierFilter);
+    }
+
+    if (kocBookingFilter !== "all") {
+      list = list.filter((c) => c.booking_status === kocBookingFilter);
+    }
+
+    list.sort((a, b) => {
+      let valA = 0;
+      let valB = 0;
+      if (kocSortBy === "multiplier") {
+        valA = a.viral_multiplier;
+        valB = b.viral_multiplier;
+      } else if (kocSortBy === "views") {
+        valA = a.max_views;
+        valB = b.max_views;
+      } else if (kocSortBy === "followers") {
+        valA = a.follower_count;
+        valB = b.follower_count;
+      } else if (kocSortBy === "videos") {
+        valA = a.videos_in_niche;
+        valB = b.videos_in_niche;
+      }
+      return kocSortOrder === "desc" ? valB - valA : valA - valB;
+    });
+
+    return list;
+  }, [creatorsList, kocSearchQuery, kocTierFilter, kocBookingFilter, kocSortBy, kocSortOrder]);
+
+  const kocKPIs = useMemo(() => {
+    const total = creatorsList.length;
+    const hiddenGems = creatorsList.filter((c) => c.tier === "hidden_gem" || c.viral_multiplier >= 10).length;
+    const realTraffic = creatorsList.filter((c) => c.tier === "real_traffic").length;
+    const hasEmail = creatorsList.filter((c) => c.email && c.email.length > 0).length;
+    const activeDeals = creatorsList.filter((c) =>
+      ["contacted", "negotiating", "sent_sample", "published"].includes(c.booking_status)
+    ).length;
+    return { total, hiddenGems, realTraffic, hasEmail, activeDeals };
+  }, [creatorsList]);
+
   return (
     <div className="min-h-screen bg-[#0b0d13] text-slate-100 p-5 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto">
@@ -953,6 +1156,18 @@ ${data.master_analysis.summary}\n`;
           >
             <Database size={16} />
             <span>Bảng Dữ Liệu (Kèm Cột AI) ({data?.videos?.length || 0})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("koc")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
+              activeTab === "koc"
+                ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-orange-500/20"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <Users size={16} />
+            <span>🎯 Booking & KOC Discovery ({creatorsList.length})</span>
           </button>
         </div>
 
@@ -1406,7 +1621,16 @@ ${data.master_analysis.summary}\n`;
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-white">@{vid.creator || "unknown"}</span>
-                              {vid.creator_followers && vid.creator_followers > 0 ? (
+                              {creatorMap.get(vid.creator)?.viral_multiplier ? (
+                                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/40 font-bold flex items-center gap-0.5">
+                                  <Zap size={9} /> x{creatorMap.get(vid.creator)!.viral_multiplier}
+                                </span>
+                              ) : null}
+                              {creatorMap.get(vid.creator)?.follower_count ? (
+                                <span className="text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-800/60 font-mono">
+                                  {creatorMap.get(vid.creator)!.follower_count.toLocaleString()} flw
+                                </span>
+                              ) : vid.creator_followers && vid.creator_followers > 0 ? (
                                 <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded-full border border-purple-800/60 font-mono">
                                   {vid.creator_followers.toLocaleString()} flw
                                 </span>
@@ -2094,9 +2318,20 @@ ${data.master_analysis.summary}\n`;
                       <tr key={v.video_id || i} className="hover:bg-slate-800/40 transition">
                         <td className="py-3 px-3 font-mono text-purple-400">{i + 1}</td>
                         <td className="py-3 px-3 font-semibold text-white">
-                          <div className="flex flex-col">
-                            <span>@{v.creator || "unknown"}</span>
-                            {v.creator_followers && v.creator_followers > 0 ? (
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5">
+                              <span>@{v.creator || "unknown"}</span>
+                              {creatorMap.get(v.creator)?.viral_multiplier ? (
+                                <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1 py-0.2 rounded font-bold">
+                                  x{creatorMap.get(v.creator)!.viral_multiplier}
+                                </span>
+                              ) : null}
+                            </div>
+                            {creatorMap.get(v.creator)?.follower_count ? (
+                              <span className="text-[10px] text-emerald-400 font-mono">
+                                {(creatorMap.get(v.creator)!.follower_count).toLocaleString()} flw
+                              </span>
+                            ) : v.creator_followers && v.creator_followers > 0 ? (
                               <span className="text-[10px] text-purple-400 font-mono">
                                 {(v.creator_followers).toLocaleString()} flw
                               </span>
@@ -2133,6 +2368,457 @@ ${data.master_analysis.summary}\n`;
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* TAB: BOOKING & KOC DISCOVERY */}
+        {activeTab === "koc" && (
+          <div className="space-y-6">
+            {/* Header Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-amber-500/20 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="bg-amber-500/20 text-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-amber-500/30 uppercase tracking-widest flex items-center gap-1">
+                      <Users size={11} /> Creator Intelligence & Booking CRM
+                    </span>
+                    <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      Playwright Live Profile Scraper
+                    </span>
+                  </div>
+                  <h2 className="text-xl md:text-2xl font-black text-white flex items-center gap-2">
+                    🎯 KOC Discovery & Booking Pipeline
+                  </h2>
+                  <p className="text-xs text-slate-300 mt-1 max-w-2xl leading-relaxed">
+                    Phân tích tỷ lệ đòn bẩy <strong className="text-amber-400">Viral Multiplier (Views / Follower)</strong> để tìm ra những <strong>💎 Hidden Gems (ít follow nhưng view x10, x20+ lần)</strong> để học kịch bản hoặc booking giá hời, kết hợp với các <strong>🌿 KOC uy tín ngách (20K-120K follow)</strong> sở hữu tệp người xem thật chuyển đổi cao.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    onClick={handleBatchEnrichCreators}
+                    disabled={batchEnriching}
+                    className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 text-xs shadow-lg shadow-orange-500/20 transition cursor-pointer disabled:opacity-50"
+                    title="Chạy Playwright bóc tách Followers, Video Count, Bio & Email của Top 20 KOC"
+                  >
+                    {batchEnriching ? (
+                      <>
+                        <Loader2 size={14} className="animate-spin" />
+                        <span>Đang quét Top 20 Live Profile...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Zap size={14} />
+                        <span>⚡ Quét Live Profile Top 20 KOC</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => loadCreators()}
+                    disabled={loadingCreators}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 text-xs font-semibold transition cursor-pointer"
+                  >
+                    <RefreshCw size={13} className={loadingCreators ? "animate-spin" : ""} />
+                    <span>Tải lại</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI Cards Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                <div className="text-[11px] text-slate-400 font-medium">Tổng KOC Trong Ngách</div>
+                <div className="text-2xl font-black text-white mt-1 flex items-baseline gap-1.5">
+                  {kocKPIs.total}
+                  <span className="text-xs font-normal text-slate-500">creators</span>
+                </div>
+                <div className="text-[10px] text-slate-500 mt-1">Từ các video đã cào</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/30 rounded-2xl p-4">
+                <div className="text-[11px] text-emerald-300 font-medium flex items-center gap-1">
+                  💎 Hidden Gems
+                </div>
+                <div className="text-2xl font-black text-emerald-400 mt-1">
+                  {kocKPIs.hiddenGems}
+                </div>
+                <div className="text-[10px] text-emerald-400/80 mt-1">Đòn bẩy view &ge; 10x - 20x+</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-teal-950/40 to-slate-900 border border-teal-500/30 rounded-2xl p-4">
+                <div className="text-[11px] text-teal-300 font-medium flex items-center gap-1">
+                  🌿 Real Niche Traffic
+                </div>
+                <div className="text-2xl font-black text-teal-300 mt-1">
+                  {kocKPIs.realTraffic}
+                </div>
+                <div className="text-[10px] text-teal-400/80 mt-1">20K - 120K flw uy tín ngách</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-violet-950/40 to-slate-900 border border-violet-500/30 rounded-2xl p-4">
+                <div className="text-[11px] text-violet-300 font-medium flex items-center gap-1">
+                  <Mail size={12} /> Có Sẵn Email
+                </div>
+                <div className="text-2xl font-black text-violet-300 mt-1">
+                  {kocKPIs.hasEmail}
+                </div>
+                <div className="text-[10px] text-violet-400/80 mt-1">Trích xuất tự động từ Bio</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-amber-950/40 to-slate-900 border border-amber-500/30 rounded-2xl p-4">
+                <div className="text-[11px] text-amber-300 font-medium flex items-center gap-1">
+                  <Award size={12} /> Tiến Độ Booking
+                </div>
+                <div className="text-2xl font-black text-amber-300 mt-1">
+                  {kocKPIs.activeDeals}
+                </div>
+                <div className="text-[10px] text-amber-400/80 mt-1">Đang đàm phán / Đã chốt</div>
+              </div>
+            </div>
+
+            {/* Filter & Search Toolbar */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="flex flex-col md:flex-row items-center gap-3">
+                <div className="relative flex-1 w-full">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Tìm theo @username, nickname, bio hoặc email..."
+                    value={kocSearchQuery}
+                    onChange={(e) => setKocSearchQuery(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">Trạng thái:</span>
+                  <select
+                    value={kocBookingFilter}
+                    onChange={(e) => setKocBookingFilter(e.target.value)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="all">Tất cả trạng thái</option>
+                    <option value="new">🆕 Mới (Chưa liên hệ)</option>
+                    <option value="contacted">✉️ Đã gửi DM / Email</option>
+                    <option value="negotiating">💬 Đang thương lượng giá</option>
+                    <option value="sent_sample">📦 Đã gửi hàng mẫu</option>
+                    <option value="published">🎉 Đã lên video</option>
+                    <option value="rejected">❌ Tạm hoãn / Từ chối</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 w-full md:w-auto">
+                  <span className="text-[11px] text-slate-400 font-medium whitespace-nowrap">Sắp xếp:</span>
+                  <select
+                    value={kocSortBy}
+                    onChange={(e) => setKocSortBy(e.target.value as any)}
+                    className="bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="multiplier">⚡ Đòn bẩy (Multiplier x cao nhất)</option>
+                    <option value="views">👁️ Lượt xem cao nhất (Max Views)</option>
+                    <option value="followers">👥 Số Follower cao nhất</option>
+                    <option value="videos">📹 Số video trong ngách</option>
+                  </select>
+                  <button
+                    onClick={() => setKocSortOrder(kocSortOrder === "desc" ? "asc" : "desc")}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-2 rounded-xl text-xs flex items-center justify-center cursor-pointer"
+                    title={kocSortOrder === "desc" ? "Đang xếp: Cao xuống thấp" : "Đang xếp: Thấp lên cao"}
+                  >
+                    <ArrowUpDown size={14} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Tier Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-800/60">
+                <span className="text-[11px] text-slate-400 mr-1 font-medium">Phân tầng KOC:</span>
+                {[
+                  { id: "all", label: `Tất cả (${kocKPIs.total})` },
+                  { id: "hidden_gem", label: `💎 Hidden Gems (${kocKPIs.hiddenGems})` },
+                  { id: "real_traffic", label: `🌿 Real Niche Traffic (${kocKPIs.realTraffic})` },
+                  { id: "rising_star", label: "🚀 Rising Stars" },
+                  { id: "macro_authority", label: "👑 Macro Brand" },
+                  { id: "unverified", label: "🔍 Cần quét Profile" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setKocTierFilter(t.id)}
+                    className={`px-3 py-1 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                      kocTierFilter === t.id
+                        ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                        : "bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Creators List Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {filteredCreators.map((c) => (
+                <div
+                  key={c.creator}
+                  className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-3xl p-5 transition shadow-xl flex flex-col justify-between gap-3.5"
+                >
+                  <div className="space-y-3">
+                    {/* Top Row: Info & Badges */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        {c.avatar_url ? (
+                          <img
+                            src={c.avatar_url}
+                            alt={c.creator}
+                            className="w-12 h-12 rounded-full object-cover border border-slate-700 shadow"
+                          />
+                        ) : (
+                          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-600 to-orange-600 flex items-center justify-center text-white font-bold text-base shadow">
+                            {c.creator.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <a
+                              href={c.profile_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-bold text-white hover:text-amber-400 text-sm flex items-center gap-1 transition"
+                            >
+                              @{c.creator}
+                              <ExternalLink size={11} className="text-slate-500" />
+                            </a>
+                            {c.verified && (
+                              <CheckCircle2 size={13} className="text-blue-400 fill-blue-400/20" />
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-400">{c.nickname}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span
+                          className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                            c.tier === "hidden_gem"
+                              ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : c.tier === "real_traffic"
+                              ? "bg-teal-500/20 text-teal-300 border-teal-500/40"
+                              : c.tier === "rising_star"
+                              ? "bg-indigo-500/20 text-indigo-300 border-indigo-500/40"
+                              : c.tier === "macro_authority"
+                              ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                              : "bg-slate-800 text-slate-400 border-slate-700"
+                          }`}
+                        >
+                          {c.tier_label}
+                        </span>
+
+                        {c.viral_multiplier > 0 && (
+                          <span className="text-xs font-black text-amber-400 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                            <Zap size={11} /> x{c.viral_multiplier} Đòn bẩy
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Metrics 4-Box Strip */}
+                    <div className="grid grid-cols-4 gap-2 bg-slate-950/80 border border-slate-800/80 rounded-xl p-2.5 text-center">
+                      <div>
+                        <div className="text-[10px] text-slate-500">Followers</div>
+                        <div className="text-xs font-bold text-white">
+                          {c.follower_count > 0 ? (
+                            c.follower_count.toLocaleString()
+                          ) : (
+                            <button
+                              onClick={() => handleEnrichSingleCreator(c.creator)}
+                              className="text-[10px] text-amber-400 hover:underline cursor-pointer"
+                            >
+                              Quét ngay
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500">Max Views</div>
+                        <div className="text-xs font-bold text-emerald-400">
+                          {c.max_views.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500">Max Saves</div>
+                        <div className="text-xs font-bold text-blue-400">
+                          {c.max_saves.toLocaleString()}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-[10px] text-slate-500">Video ngách</div>
+                        <div className="text-xs font-bold text-purple-400">
+                          {c.videos_in_niche} clips
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Recommendation Box */}
+                    <div className="bg-slate-950/50 border border-slate-800 rounded-xl p-2.5 space-y-1">
+                      <div className="text-[11px] font-semibold text-amber-300 flex items-center gap-1">
+                        <Sparkles size={12} /> {c.recommendation}
+                      </div>
+                      <div className="text-[10px] text-slate-400 leading-relaxed">
+                        {c.tier_desc}
+                      </div>
+                    </div>
+
+                    {/* Bio & Contact Strip */}
+                    <div className="space-y-2">
+                      {c.signature && (
+                        <p className="text-[11px] text-slate-300 bg-slate-950/30 p-2 rounded-lg border border-slate-800/40 italic line-clamp-2">
+                          &ldquo;{c.signature}&rdquo;
+                        </p>
+                      )}
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        {c.email ? (
+                          <a
+                            href={`mailto:${c.email}?subject=Đề xuất hợp tác tài trợ sản phẩm Decor TikTok Shop&body=Chào ${c.nickname}, bên mình xem video của bạn thấy rất chất lượng và muốn gửi mẫu sản phẩm decor hợp tác làm video...`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-xs font-bold shadow-md shadow-violet-600/20 transition"
+                          >
+                            <Mail size={12} />
+                            <span>Gửi Email: {c.email}</span>
+                          </a>
+                        ) : (
+                          <a
+                            href={c.profile_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition"
+                          >
+                            <Send size={12} />
+                            <span>Nhắn tin DM TikTok</span>
+                          </a>
+                        )}
+
+                        <button
+                          onClick={() => handleEnrichSingleCreator(c.creator)}
+                          disabled={enrichingCreator === c.creator}
+                          className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs flex items-center gap-1 cursor-pointer disabled:opacity-50 transition"
+                          title="Quét lại live follower, bio và email của KOC này"
+                        >
+                          <RefreshCw
+                            size={11}
+                            className={enrichingCreator === c.creator ? "animate-spin" : ""}
+                          />
+                          <span>{enrichingCreator === c.creator ? "Đang quét..." : "Quét Live"}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Booking CRM Section */}
+                  <div className="space-y-2.5 pt-2.5 border-t border-slate-800/80">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5 font-medium">
+                          Tiến độ hợp tác:
+                        </label>
+                        <select
+                          value={c.booking_status}
+                          onChange={(e) =>
+                            handleUpdateBooking(c.creator, e.target.value, c.booking_notes, c.booking_price)
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-amber-500"
+                        >
+                          <option value="new">🆕 Mới (Chưa liên hệ)</option>
+                          <option value="contacted">✉️ Đã gửi DM / Email</option>
+                          <option value="negotiating">💬 Đang thương lượng giá</option>
+                          <option value="sent_sample">📦 Đã gửi hàng mẫu</option>
+                          <option value="published">🎉 Đã lên video</option>
+                          <option value="rejected">❌ Tạm hoãn / Từ chối</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5 font-medium">
+                          Giá deal dự kiến ($):
+                        </label>
+                        <input
+                          type="number"
+                          placeholder="0"
+                          defaultValue={c.booking_price || ""}
+                          onBlur={(e) =>
+                            handleUpdateBooking(
+                              c.creator,
+                              c.booking_status,
+                              c.booking_notes,
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5 font-medium">
+                          Ghi chú deal:
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="VD: Gửi mẫu cây 7ft..."
+                          defaultValue={c.booking_notes || ""}
+                          onBlur={(e) =>
+                            handleUpdateBooking(
+                              c.creator,
+                              c.booking_status,
+                              e.target.value,
+                              c.booking_price
+                            )
+                          }
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-[11px] text-slate-200 focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Top Performing Videos in Niche */}
+                    {c.top_videos && c.top_videos.length > 0 && (
+                      <div className="pt-1.5 border-t border-slate-800/50 space-y-1">
+                        <div className="text-[10px] text-slate-500 font-medium">
+                          Video tiêu biểu trong ngách:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {c.top_videos.map((tv) => (
+                            <a
+                              key={tv.video_id}
+                              href={tv.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-md px-2 py-1 text-[10px] text-slate-300 flex items-center gap-1.5 transition"
+                              title={tv.caption}
+                            >
+                              <Play size={9} className="text-emerald-400 fill-emerald-400" />
+                              <span className="font-semibold text-emerald-400">
+                                {tv.views.toLocaleString()} views
+                              </span>
+                              <span className="text-slate-500 truncate max-w-[120px]">
+                                {tv.caption || "Video"}
+                              </span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {filteredCreators.length === 0 && (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center text-slate-500 space-y-3">
+                <Users size={36} className="mx-auto text-slate-600" />
+                <p className="text-sm font-semibold">Không tìm thấy KOC nào phù hợp với bộ lọc hiện tại.</p>
+                <p className="text-xs text-slate-600">Hãy thử đổi từ khóa tìm kiếm hoặc chọn lại phân tầng KOC.</p>
+              </div>
+            )}
           </div>
         )}
 
