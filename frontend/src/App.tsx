@@ -2538,12 +2538,33 @@ ${data.master_analysis.summary}\n`;
                       <div className="grid md:grid-cols-2 gap-3.5 mt-4">
                         {/* 1. Hook */}
                         <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-pink-400 uppercase tracking-wider mb-1.5">
-                            <span>🎣 Hook Mở Đầu (0-3 giây)</span>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-pink-400 uppercase tracking-wider">
+                              <span>🎣 Hook Mở Đầu (0-3 giây)</span>
+                            </div>
+                            {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") && (
+                              <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                🎙️ Whisper Verified
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                            {rev?.hook || "Hook trực quan mở đầu bằng demo thực tế sản phẩm để giữ chân người xem."}
-                          </p>
+                          {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") ? (
+                            <div className="space-y-1.5">
+                              <p className="text-xs md:text-sm text-pink-200 font-medium leading-relaxed italic bg-pink-950/20 border border-pink-900/30 rounded-lg p-2">
+                                &ldquo;{rev.spoken_hook}&rdquo;
+                              </p>
+                              {rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác" && (
+                                <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                                  <span>👁️ Thị giác:</span>
+                                  <span className="text-slate-300 font-medium">{rev.visual_hook}</span>
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                              {rev?.hook || "Hook trực quan mở đầu bằng demo thực tế sản phẩm để giữ chân người xem."}
+                            </p>
+                          )}
                         </div>
 
                         {/* 2. Viral Mechanics */}

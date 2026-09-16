@@ -572,28 +572,65 @@ def update_multimodal_analysis(video_id: str, data: dict):
     cursor = conn.cursor()
     kf = data.get("keyframes")
     kf_json = json.dumps(kf, ensure_ascii=False) if isinstance(kf, list) else data.get("keyframes_json", "[]")
-    cursor.execute("""
-    UPDATE analysis_reviews
-    SET transcript = ?,
-        spoken_hook = ?,
-        visual_hook = ?,
-        setting = ?,
-        on_screen_text = ?,
-        visual_style = ?,
-        ad_angle = ?,
-        keyframes_json = ?
-    WHERE video_id = ?
-    """, (
-        data.get("transcript", ""),
-        data.get("spoken_hook", ""),
-        data.get("visual_hook", ""),
-        data.get("setting", ""),
-        data.get("on_screen_text", ""),
-        data.get("visual_style", ""),
-        data.get("ad_angle", "Aesthetic Room Tour"),
-        kf_json,
-        str(video_id)
-    ))
+
+    spoken = (data.get("spoken_hook") or "").strip()
+    visual = (data.get("visual_hook") or "").strip()
+    new_hook = None
+    if spoken and not spoken.startswith("Lỗi") and "không có lời thoại" not in spoken.lower():
+        new_hook = f"🎙️ Lời thoại mở đầu: \"{spoken}\""
+        if visual and visual != "Lỗi phân tích thị giác":
+            new_hook += f" | 👁️ Thị giác: {visual}"
+    elif visual and visual != "Lỗi phân tích thị giác":
+        new_hook = f"👁️ Hook thị giác: {visual}"
+
+    if new_hook:
+        cursor.execute("""
+        UPDATE analysis_reviews
+        SET transcript = ?,
+            spoken_hook = ?,
+            visual_hook = ?,
+            setting = ?,
+            on_screen_text = ?,
+            visual_style = ?,
+            ad_angle = ?,
+            keyframes_json = ?,
+            hook = ?
+        WHERE video_id = ?
+        """, (
+            data.get("transcript", ""),
+            spoken,
+            visual,
+            data.get("setting", ""),
+            data.get("on_screen_text", ""),
+            data.get("visual_style", ""),
+            data.get("ad_angle", "Aesthetic Room Tour"),
+            kf_json,
+            new_hook,
+            str(video_id)
+        ))
+    else:
+        cursor.execute("""
+        UPDATE analysis_reviews
+        SET transcript = ?,
+            spoken_hook = ?,
+            visual_hook = ?,
+            setting = ?,
+            on_screen_text = ?,
+            visual_style = ?,
+            ad_angle = ?,
+            keyframes_json = ?
+        WHERE video_id = ?
+        """, (
+            data.get("transcript", ""),
+            spoken,
+            visual,
+            data.get("setting", ""),
+            data.get("on_screen_text", ""),
+            data.get("visual_style", ""),
+            data.get("ad_angle", "Aesthetic Room Tour"),
+            kf_json,
+            str(video_id)
+        ))
 
     if cursor.rowcount == 0:
         cursor.execute("SELECT keyword, caption, score FROM videos WHERE video_id = ?", (str(video_id),))

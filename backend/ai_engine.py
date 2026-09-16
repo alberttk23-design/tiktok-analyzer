@@ -90,23 +90,28 @@ def build_fallback_review(video, keyword, comment_insight=None):
     saves = video.get("saves") or 0
     creator = video.get("creator") or "creator"
 
+    # Clean caption by stripping URLs, hashtags, and mentions to get meaningful text
+    clean_caption = re.sub(r'https?://\S+', '', caption)
+    clean_caption = re.sub(r'[#@][\w\d_.]+', '', clean_caption).strip()
+    clean_caption = re.sub(r'\s+', ' ', clean_caption)
+
     lower_cap = caption.lower()
     if any(w in lower_cap for w in ["diy", "how to", "build", "made"]):
-        hook_type = "DIY Craftsmanship / Process Hook"
-        base_psych = "Taps into pride of home improvement and cost-saving ingenuity; viewers trust creators who build with their hands."
-        win_formula = "Step-by-step unboxing/crafting -> satisfying reveal -> cost breakdown vs commercial alternatives."
+        hook_type = "🛠️ Hook Quy Trình / Tự Làm (DIY)"
+        base_psych = "Khơi gợi niềm tự hào tự tân trang không gian sống và tiết kiệm chi phí; người xem tin tưởng creator tự tay thực hiện."
+        win_formula = "Quy trình từng bước -> Thành quả mãn nhãn -> So sánh chi phí tối ưu."
     elif any(w in lower_cap for w in ["amazon", "deal", "costco", "finds", "haul", "affordable"]):
-        hook_type = "Bargain Discovery / Smart Shopper Hook"
-        base_psych = "Immediate fear of missing out (FOMO) and pleasure of discovering high-end luxury at a discount price."
-        win_formula = "Curiosity question ('You won't believe this price') -> visual texture zoom -> room transformation -> bio link CTA."
+        hook_type = "🏷️ Hook Săn Deal / Mua Sắm Thông Thái"
+        base_psych = "Kích hoạt tâm lý sợ bỏ lỡ (FOMO) và cảm giác thỏa mãn khi tìm được sản phẩm ưng ý với mức giá hợp lý."
+        win_formula = "Đặt câu hỏi gợi mở -> Zoom cận cảnh chất lượng -> Toàn cảnh không gian -> CTA giỏ hàng."
     elif any(w in lower_cap for w in ["look at", "aesthetic", "loving", "realistic", "transform"]):
-        hook_type = "Aesthetic Transformation / Visual Shock Hook"
-        base_psych = "Desire for elevated living space and prestige; validates realistic faux items as tasteful and practical."
-        win_formula = "0-3s quick visual reveal -> tactile proof (touching leaves) -> styled living room context -> recommendation."
+        hook_type = "✨ Hook Biến Đổi Không Gian / Đòn Bẩy Thị Giác"
+        base_psych = "Đánh trúng mong muốn nâng cấp không gian sống đẹp mắt; giải tỏa sự e ngại sản phẩm không giống như ảnh."
+        win_formula = "0-3s hé lộ thị giác -> Chứng minh độ chân thực -> Đặt vào bối cảnh thực tế -> Đề xuất mua hàng."
     else:
-        hook_type = "Curiosity / Lifestyle Context Hook"
-        base_psych = "Emotional connection to cozy living, relieving maintenance anxiety (no watering, no dying plants)."
-        win_formula = "Natural lifestyle framing -> problem resolution -> seamless product showcase."
+        hook_type = "🌿 Hook Đời Thường / Phong Cách Sống"
+        base_psych = "Kết nối cảm xúc với cuộc sống thoải mái, giải tỏa phiền toái chăm sóc hay vệ sinh phức tạp."
+        win_formula = "Bối cảnh đời thường tự nhiên -> Giải quyết rào cản -> Trình diễn sản phẩm mượt mà."
 
     # Integrate real Voice-of-Customer from comments into Viral Mechanics
     comment_details = ""
@@ -128,7 +133,22 @@ def build_fallback_review(video, keyword, comment_insight=None):
             base_psych += f" (Khán giả phản hồi thực tế: {comment_insight.get('summary', '')})"
 
     ad_angle = classify_ad_angle(caption=caption, comments_text=comment_details)
-    hook_desc = f"{hook_type}: Opening with '{caption[:75]}...' to capture viewer attention within 3 seconds."
+    
+    # Intelligent Hook generation: Prefer real spoken speech or clean caption over raw hashtags
+    spoken_h = (video.get("spoken_hook") or "").strip()
+    visual_h = (video.get("visual_hook") or "").strip()
+
+    if spoken_h and not spoken_h.startswith("Lỗi") and "không có lời thoại" not in spoken_h.lower():
+        hook_desc = f"🎙️ Lời thoại mở đầu: \"{spoken_h}\""
+        if visual_h and visual_h != "Lỗi phân tích thị giác":
+            hook_desc += f" | 👁️ Thị giác: {visual_h}"
+    elif visual_h and visual_h != "Lỗi phân tích thị giác":
+        hook_desc = f"👁️ Hook thị giác: {visual_h}"
+    elif len(clean_caption) >= 8:
+        hook_desc = f"{hook_type}: Dùng câu mở đầu '{clean_caption[:80]}...' để gây tò mò và giữ chân người xem trong 3 giây đầu."
+    else:
+        hook_desc = f"{hook_type}: Trình diễn cận cảnh sản phẩm '{keyword}' trong không gian thực tế để thu hút sự chú ý ngay 3 giây đầu."
+
     viral_desc = f"Đạt {views:,} views và {saves:,} lượt lưu ({comments:,} bình luận) nhờ giá trị tham khảo thực tế cho người tìm kiếm '{keyword}'.{top_topics_str}{comment_details}"
 
     viral_score = min(98.0, max(50.0, float(video.get("score") or 75.0)))
@@ -721,6 +741,15 @@ def analyze_single_video_multimodal(video_id: str) -> dict:
         visual_hook=mm_data.get("visual_hook", "")
     )
     mm_data["ad_angle"] = angle
+
+    spoken = (mm_data.get("spoken_hook") or "").strip()
+    visual = (mm_data.get("visual_hook") or "").strip()
+    if spoken and not spoken.startswith("Lỗi") and "không có lời thoại" not in spoken.lower():
+        mm_data["hook"] = f"🎙️ Lời thoại: \"{spoken}\""
+        if visual and visual != "Lỗi phân tích thị giác":
+            mm_data["hook"] += f" | 👁️ Thị giác: {visual}"
+    elif visual and visual != "Lỗi phân tích thị giác":
+        mm_data["hook"] = f"👁️ Hook thị giác: {visual}"
 
     # Update database
     db.update_multimodal_analysis(str(video_id), mm_data)
