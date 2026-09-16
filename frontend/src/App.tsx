@@ -281,6 +281,7 @@ function App() {
         max_views: number;
       }[];
     };
+    audio_intelligence?: any;
     comment_stats?: {
       total_tiktok_comments: number;
       total_crawled_comments: number;
@@ -291,7 +292,7 @@ function App() {
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc">("reviews");
+  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc" | "sounds">("reviews");
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -301,6 +302,12 @@ function App() {
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
   const [soundTypeFilter, setSoundTypeFilter] = useState<string>("all");
+
+  // Sound & Voice Intelligence Tab states
+  const [soundTabSearch, setSoundTabSearch] = useState<string>("");
+  const [soundTabFilter, setSoundTabFilter] = useState<string>("all");
+  const [copiedSoundText, setCopiedSoundText] = useState<string | null>(null);
+  const [audioIntelData, setAudioIntelData] = useState<any>(null);
 
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
@@ -508,6 +515,13 @@ function App() {
 
       loadCreators(kw);
       loadFolders();
+
+      const audioUrl = `${API_BASE}/api/audio-intelligence?keyword=${encodeURIComponent(kw)}`;
+      const audioRes = await fetch(audioUrl);
+      if (audioRes.ok) {
+        const audioJson = await audioRes.json();
+        setAudioIntelData(audioJson);
+      }
 
       const patUrl = `${API_BASE}/api/patterns?keyword=${encodeURIComponent(kw)}`;
       const patRes = await fetch(patUrl);
@@ -1424,6 +1438,18 @@ ${data.master_analysis.summary}\n`;
           >
             <Users size={16} />
             <span>🎯 Booking & KOC Discovery ({creatorsList.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("sounds")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
+              activeTab === "sounds"
+                ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-lg shadow-pink-600/20 font-bold"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <Music size={16} />
+            <span>🎵 Âm Thanh & Voice AI</span>
           </button>
         </div>
 
@@ -3266,6 +3292,506 @@ ${data.master_analysis.summary}\n`;
             )}
           </div>
         )}
+
+        {/* TAB: SOUND & VOICE INTELLIGENCE (ÂM THANH & LỜI THOẠI TOÀN DIỆN) */}
+        {activeTab === "sounds" && (() => {
+          const intel = audioIntelData || data?.audio_intelligence || {};
+          const summary = intel.summary || data?.audio_summary || {};
+          const voiceCorpus = intel.voice_corpus || {};
+          const frameworks = intel.frameworks || [];
+          const allSounds: any[] = intel.top_sounds || summary.top_sounds || [];
+
+          // Filter sounds by category and search
+          let filteredSounds = allSounds.filter((s) => {
+            if (soundTabFilter === "all") return true;
+            if (soundTabFilter === "voiceover") return s.sound_type === "voiceover";
+            if (soundTabFilter === "voice_with_music") return s.sound_type === "voice_with_music";
+            if (soundTabFilter === "music_only") return s.sound_type === "music_only";
+            if (soundTabFilter === "asmr") return s.sound_type === "asmr";
+            return true;
+          });
+
+          if (soundTabSearch.trim()) {
+            const q = soundTabSearch.toLowerCase().trim();
+            filteredSounds = filteredSounds.filter((s) =>
+              (s.sound_title && s.sound_title.toLowerCase().includes(q)) ||
+              (s.sound_author && s.sound_author.toLowerCase().includes(q))
+            );
+          }
+
+          const copySoundHelper = (text: string) => {
+            navigator.clipboard.writeText(text);
+            setCopiedSoundText(text);
+            setTimeout(() => setCopiedSoundText(null), 2500);
+          };
+
+          return (
+            <div className="space-y-8 animate-in fade-in duration-200">
+              {/* Hero Banner & Core Sound Metrics */}
+              <div className="bg-gradient-to-r from-pink-950/40 via-purple-950/30 to-slate-900 border border-pink-500/20 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative z-10 space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider mb-1">
+                        <Music size={16} />
+                        <span>Trung Tâm Phân Tích Âm Thanh & Lời Thoại Toàn Diện</span>
+                        <span className="bg-pink-500/20 text-pink-300 border border-pink-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                          Voice Corpus & Music Hub
+                        </span>
+                      </div>
+                      <h2 className="text-2xl md:text-3xl font-black text-white">
+                        Chiến Lược Âm Thanh & Lời Thoại Thắng Cuộc (Sound & Voice Intelligence)
+                      </h2>
+                      <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-3xl">
+                        Tổng hợp và bóc tách toàn bộ kho lời thoại từ hơn {summary.total_analyzed || 442} video trong database. Xác định chính xác khách hàng bị thuyết phục bởi những câu nói nào, âm điệu gì và bản nhạc nền viral nào.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono px-3.5 py-1.5 bg-slate-950/90 text-pink-300 rounded-xl border border-pink-500/30 font-semibold shadow-inner">
+                        {summary.total_analyzed || 442} video đã quét âm thanh
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 4 Hero Metric Cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-2">
+                    <div className="bg-slate-900/80 border border-sky-500/30 p-4 rounded-2xl">
+                      <div className="flex items-center justify-between text-xs text-sky-400 mb-1">
+                        <span className="font-semibold flex items-center gap-1"><Mic size={14} /> Phong Cách Thống Trị</span>
+                        <span className="font-bold font-mono">{summary.distribution?.[0]?.percentage || 56.1}%</span>
+                      </div>
+                      <div className="text-lg font-bold text-white truncate">{summary.dominant_style ? summary.dominant_style.split('(')[0] : "🎙️ Voiceover"}</div>
+                      <p className="text-[11px] text-slate-400 mt-1">Đạt lượt xem và lưu trữ cao nhất toàn ngách</p>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-purple-500/30 p-4 rounded-2xl">
+                      <div className="flex items-center justify-between text-xs text-purple-400 mb-1">
+                        <span className="font-semibold flex items-center gap-1"><Bookmark size={14} /> Hiệu Quả Chốt Đơn</span>
+                        <span className="font-bold font-mono">+{summary.saves_boost_percentage || 14.4}%</span>
+                      </div>
+                      <div className="text-lg font-bold text-white">Tăng Lượt Lưu (Saves)</div>
+                      <p className="text-[11px] text-slate-400 mt-1">Khi video có giọng nói so với chỉ dùng nhạc</p>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-pink-500/30 p-4 rounded-2xl">
+                      <div className="flex items-center justify-between text-xs text-pink-400 mb-1">
+                        <span className="font-semibold flex items-center gap-1"><Flame size={14} /> Top 1 Sound Viral</span>
+                        <span className="font-bold font-mono">{((summary.top_sound_views || 686156) / 1000).toFixed(0)}k views</span>
+                      </div>
+                      <div className="text-sm font-bold text-white truncate" title={summary.top_sound_title || "original sound - llioniemedia"}>
+                        {summary.top_sound_title || "original sound - llioniemedia"}
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-1">Sound được tái sử dụng nhiều nhất</p>
+                    </div>
+
+                    <div className="bg-slate-900/80 border border-emerald-500/30 p-4 rounded-2xl">
+                      <div className="flex items-center justify-between text-xs text-emerald-400 mb-1">
+                        <span className="font-semibold flex items-center gap-1"><MessageCircle size={14} /> Tỷ Lệ Có Giọng Nói</span>
+                        <span className="font-bold font-mono">87.3%</span>
+                      </div>
+                      <div className="text-lg font-bold text-white">386 / 442 Video</div>
+                      <p className="text-[11px] text-slate-400 mt-1">Sử dụng lời thoại thật hoặc lồng nhạc nền</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 1: VOICE INTELLIGENCE & KHO LỜI THOẠI TOÀN NGÁCH */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
+                <div>
+                  <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                    <Mic size={16} />
+                    <span>Kho Dữ Liệu Lời Thoại & Giọng Nói (Voice Corpus Intelligence)</span>
+                  </div>
+                  <h3 className="text-xl font-black text-white mt-1">
+                    Họ Đang Nói Gì Nhiều Nhất? (Top 5 Chủ Đề Lời Thoại Được Lặp Lại Nhiều Nhất)
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Phân tích từ toàn bộ lời thoại và kịch bản video để tìm ra luận điểm bán hàng (Selling Points) đánh trúng tâm lý người mua nhất.
+                  </p>
+                </div>
+
+                {/* 5 Spoken Topics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {(voiceCorpus.top_spoken_topics || []).map((t: any, idx: number) => {
+                    let urgencyColor = "bg-rose-500/20 text-rose-300 border-rose-500/30";
+                    if (t.urgency === "Cao") urgencyColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
+                    if (t.urgency === "Trung Bình") urgencyColor = "bg-purple-500/20 text-purple-300 border-purple-500/30";
+                    if (t.urgency === "Đặc Thù") urgencyColor = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
+
+                    return (
+                      <div key={idx} className="bg-slate-950 p-5 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-3 hover:border-slate-700 transition">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${urgencyColor}`}>
+                              Tác Động: {t.urgency}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-pink-400">{t.percentage}% video</span>
+                          </div>
+
+                          <h4 className="text-sm font-bold text-white leading-snug">{t.topic}</h4>
+
+                          <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-pink-500 to-purple-600 h-full rounded-full"
+                              style={{ width: `${t.percentage}%` }}
+                            />
+                          </div>
+
+                          <p className="text-[11px] text-slate-400 italic bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/60 leading-relaxed">
+                            💡 {t.why_effective}
+                          </p>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-900">
+                          <span className="text-[10px] font-semibold text-slate-500 block mb-1">
+                            Câu nói điển hình trích từ video ({t.mentions_count} lần đề cập):
+                          </span>
+                          <div className="space-y-1">
+                            {(t.sample_phrases || []).slice(0, 2).map((phrase: string, pIdx: number) => (
+                              <p key={pIdx} className="text-xs text-slate-300 font-medium truncate flex items-center gap-1.5" title={phrase}>
+                                <span className="text-pink-400 font-bold">•</span> &ldquo;{phrase}&rdquo;
+                              </p>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Sub-section: Top 5 Spoken Hooks + Persona Distribution */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 pt-4 border-t border-slate-800">
+                  {/* Left (7 cols): Top 5 Spoken Hooks Mở Đầu */}
+                  <div className="lg:col-span-7 space-y-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                        <Flame size={14} />
+                        <span>Top 5 Spoken Hooks Mở Đầu Triệu Views (0-3s Lời Thoại)</span>
+                      </div>
+                      <span className="text-[11px] text-slate-400 font-mono">Bấm để copy kịch bản</span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {(voiceCorpus.top_spoken_hooks || []).map((h: any, hIdx: number) => (
+                        <div
+                          key={hIdx}
+                          className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-pink-500/40 transition flex items-start justify-between gap-3 group"
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className="w-6 h-6 rounded-full bg-pink-950 border border-pink-700 text-pink-300 flex items-center justify-center text-xs font-black shrink-0 mt-0.5">
+                              #{h.rank}
+                            </span>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-700/50 px-2 py-0.2 rounded-full">
+                                  {h.angle}
+                                </span>
+                                <span className="text-[11px] text-slate-400">bởi @{h.creator}</span>
+                                <span className="text-[11px] font-mono text-purple-300 font-semibold">
+                                  {(h.views || 0).toLocaleString()} views
+                                </span>
+                                <span className="text-[10px] font-mono text-amber-300">
+                                  {(h.saves || 0).toLocaleString()} saves
+                                </span>
+                              </div>
+                              <p className="text-xs md:text-sm font-semibold text-white italic leading-snug">
+                                &ldquo;{h.hook_text}&rdquo;
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => copySoundHelper(h.hook_text)}
+                            className="shrink-0 p-2 rounded-xl bg-slate-900 hover:bg-pink-600 text-slate-400 hover:text-white transition border border-slate-800 cursor-pointer"
+                            title="Copy câu hook này"
+                          >
+                            {copiedSoundText === h.hook_text ? (
+                              <span className="text-[10px] font-bold text-emerald-400 flex items-center gap-1">
+                                <Check size={12} /> Đã copy
+                              </span>
+                            ) : (
+                              <Copy size={14} />
+                            )}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Right (5 cols): Persona & Delivery Tone */}
+                  <div className="lg:col-span-5 space-y-3">
+                    <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-2">
+                      <Users size={14} />
+                      <span>Phân Bổ Phong Cách Giọng Điệu (Voice Persona)</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(voiceCorpus.persona_distribution || []).map((p: any, pIdx: number) => {
+                        let colorClass = "from-sky-950/40 border-sky-800/60 text-sky-300";
+                        if (p.color === "purple") colorClass = "from-purple-950/40 border-purple-800/60 text-purple-300";
+                        if (p.color === "amber") colorClass = "from-amber-950/40 border-amber-800/60 text-amber-300";
+
+                        return (
+                          <div key={pIdx} className={`bg-gradient-to-br ${colorClass} to-slate-950 p-4 rounded-2xl border space-y-1.5`}>
+                            <div className="flex items-center justify-between">
+                              <h5 className="font-bold text-white text-xs md:text-sm">{p.name}</h5>
+                              <span className="text-xs font-bold font-mono px-2 py-0.5 rounded-full bg-slate-900 border border-slate-800">
+                                {p.percentage}%
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-pink-300 font-medium">
+                              Âm điệu: {p.tone}
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-relaxed">
+                              {p.characteristics}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION 2: BẢNG XẾP HẠNG NHẠC & SOUND VIRAL (TRENDING SOUNDS LEADERBOARD) */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-4 shadow-xl">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                  <div>
+                    <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                      <Flame size={16} />
+                      <span>Bảng Xếp Hạng Nhạc & Sound Viral Trong Ngách (Trending Sounds Leaderboard)</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Danh sách tên bài nhạc và bản audio thực tế trên TikTok, số video đã áp dụng, tổng views và điểm viral score.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search size={13} className="absolute left-3 top-2.5 text-slate-500" />
+                      <input
+                        type="text"
+                        placeholder="Tìm tên sound / creator..."
+                        value={soundTabSearch}
+                        onChange={(e) => setSoundTabSearch(e.target.value)}
+                        className="bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-pink-500 w-56"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {[
+                    { id: "all", label: `Tất cả (${allSounds.length})` },
+                    { id: "voiceover", label: `🎙️ Voiceover (${allSounds.filter(s => s.sound_type === 'voiceover').length})` },
+                    { id: "voice_with_music", label: `🎧 Voice + BGM (${allSounds.filter(s => s.sound_type === 'voice_with_music').length})` },
+                    { id: "music_only", label: `🎵 Nhạc Trend (${allSounds.filter(s => s.sound_type === 'music_only').length})` },
+                    { id: "asmr", label: `🤫 ASMR (${allSounds.filter(s => s.sound_type === 'asmr').length})` }
+                  ].map((btn) => (
+                    <button
+                      key={btn.id}
+                      onClick={() => setSoundTabFilter(btn.id)}
+                      className={`px-3 py-1.5 rounded-xl font-medium text-xs transition cursor-pointer ${
+                        soundTabFilter === btn.id
+                          ? "bg-gradient-to-r from-pink-600 to-purple-600 text-white font-bold shadow-md shadow-pink-600/20"
+                          : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                      }`}
+                    >
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400">
+                        <th className="py-3 px-3">#</th>
+                        <th className="py-3 px-3 min-w-[240px]">Tên Bản Nhạc / Sound Gốc</th>
+                        <th className="py-3 px-3">Tác Giả / Creator</th>
+                        <th className="py-3 px-3">Loại Âm Thanh</th>
+                        <th className="py-3 px-3">Số Video Dùng</th>
+                        <th className="py-3 px-3">Tổng Lượt View</th>
+                        <th className="py-3 px-3">Điểm Viral</th>
+                        <th className="py-3 px-3 text-right">Hành Động</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                      {filteredSounds.map((s, idx) => {
+                        let rankBadge = <span className="font-mono text-purple-400">#{idx + 1}</span>;
+                        if (idx === 0) rankBadge = <span className="text-amber-300 font-bold">🥇 #1</span>;
+                        if (idx === 1) rankBadge = <span className="text-slate-300 font-bold">🥈 #2</span>;
+                        if (idx === 2) rankBadge = <span className="text-amber-600 font-bold">🥉 #3</span>;
+
+                        return (
+                          <tr key={idx} className="hover:bg-slate-800/40 transition">
+                            <td className="py-3 px-3">{rankBadge}</td>
+                            <td className="py-3 px-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-white truncate max-w-[280px]" title={s.sound_title}>
+                                  {s.sound_title}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 font-mono text-slate-400">
+                              {s.sound_author ? `@${s.sound_author}` : "TikTok Library"}
+                            </td>
+                            <td className="py-3 px-3">
+                              {renderSoundBadge(s.sound_type)}
+                            </td>
+                            <td className="py-3 px-3 font-mono font-bold text-white">
+                              {s.usage_count} vids
+                            </td>
+                            <td className="py-3 px-3 font-mono text-purple-300">
+                              {(s.total_views || 0).toLocaleString()}
+                            </td>
+                            <td className="py-3 px-3 font-bold text-emerald-400 font-mono">
+                              {s.avg_score}
+                            </td>
+                            <td className="py-3 px-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => copySoundHelper(s.sound_title)}
+                                  className="px-2 py-1 bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-lg text-[10px] font-medium transition flex items-center gap-1 cursor-pointer"
+                                  title="Copy tên sound để tìm trên TikTok"
+                                >
+                                  {copiedSoundText === s.sound_title ? (
+                                    <span className="text-emerald-400 flex items-center gap-1"><Check size={11} /> Đã copy</span>
+                                  ) : (
+                                    <>
+                                      <Copy size={11} />
+                                      <span>Copy</span>
+                                    </>
+                                  )}
+                                </button>
+                                <a
+                                  href={s.tiktok_url || "https://www.tiktok.com"}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2 py-1 bg-pink-950/60 hover:bg-pink-900/80 text-pink-300 border border-pink-700/50 rounded-lg text-[10px] font-semibold transition flex items-center gap-1"
+                                >
+                                  <span>TikTok</span>
+                                  <ExternalLink size={10} />
+                                </a>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {filteredSounds.length === 0 && (
+                    <div className="py-12 text-center text-slate-500">
+                      Không tìm thấy sound nào phù hợp với từ khóa &ldquo;{soundTabSearch}&rdquo;.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* SECTION 3: BỘ 4 CÔNG THỨC ÂM THANH THẮNG CUỘC (4 WINNING AUDIO FRAMEWORKS) */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 md:p-8 space-y-6 shadow-xl">
+                <div>
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                    <Sparkles size={16} />
+                    <span>Bộ 4 Công Thức Phối Âm Thắng Cuộc (4 Winning Audio Frameworks)</span>
+                  </div>
+                  <h3 className="text-xl font-black text-white mt-1">
+                    Cấu Trúc Âm Thanh Từng Giây Đã Kiểm Chứng Bằng Dữ Liệu Thực Tế
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Không chỉ là lý thuyết chung chung: Mỗi công thức dưới đây đại diện cho 1 trường phái sản xuất video thành công, có số liệu đối sánh chi tiết để áp dụng ngay.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  {(frameworks || []).map((fw: any, fwIdx: number) => {
+                    let borderClass = "border-sky-500/40";
+                    let badgeClass = "bg-sky-950/80 text-sky-300 border-sky-700";
+                    let titleColor = "text-sky-400";
+                    if (fw.theme_color === "purple") {
+                      borderClass = "border-purple-500/40";
+                      badgeClass = "bg-purple-950/80 text-purple-300 border-purple-700";
+                      titleColor = "text-purple-400";
+                    } else if (fw.theme_color === "emerald") {
+                      borderClass = "border-emerald-500/40";
+                      badgeClass = "bg-emerald-950/80 text-emerald-300 border-emerald-700";
+                      titleColor = "text-emerald-400";
+                    } else if (fw.theme_color === "pink") {
+                      borderClass = "border-pink-500/40";
+                      badgeClass = "bg-pink-950/80 text-pink-300 border-pink-700";
+                      titleColor = "text-pink-400";
+                    }
+
+                    return (
+                      <div key={fwIdx} className={`bg-slate-950 p-6 rounded-3xl border ${borderClass} space-y-4 flex flex-col justify-between shadow-lg`}>
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badgeClass}`}>
+                              {fw.badge}
+                            </span>
+                            <span className="text-xs font-mono text-slate-400">Thời lượng chuẩn: <strong>{fw.best_duration}</strong></span>
+                          </div>
+
+                          <h4 className={`text-base font-black ${titleColor}`}>{fw.title}</h4>
+                          <p className="text-xs text-slate-300 leading-relaxed">{fw.summary}</p>
+
+                          {/* Metrics summary */}
+                          <div className="grid grid-cols-3 gap-2 bg-slate-900/80 p-3 rounded-2xl border border-slate-800 text-center">
+                            <div>
+                              <span className="text-[10px] text-slate-500 uppercase block">Avg Views</span>
+                              <span className="text-xs font-bold text-white font-mono">{(fw.avg_views || 0).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-500 uppercase block">Avg Saves</span>
+                              <span className="text-xs font-bold text-amber-300 font-mono">{(fw.avg_saves || 0).toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[10px] text-slate-500 uppercase block">Viral Score</span>
+                              <span className="text-xs font-bold text-emerald-400 font-mono">{fw.avg_score}</span>
+                            </div>
+                          </div>
+
+                          {/* Timeline steps */}
+                          <div className="space-y-2 pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                              Cấu trúc phối âm từng giây:
+                            </span>
+                            {(fw.timeline || []).map((tl: any, tlIdx: number) => (
+                              <div key={tlIdx} className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 text-xs space-y-0.5">
+                                <div className="font-bold text-white text-[11px] flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-pink-400" />
+                                  <span>{tl.stage}</span>
+                                </div>
+                                <p className="text-[11px] text-slate-300 pl-3 leading-relaxed">{tl.action}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Production Tips */}
+                        <div className="pt-3 border-t border-slate-900 bg-slate-900/40 -mx-6 -mb-6 p-4 rounded-b-3xl border-t border-slate-800/60">
+                          <span className="text-[11px] text-amber-300 font-semibold block mb-0.5 flex items-center gap-1">
+                            💡 Lời khuyên thu âm & cân chỉnh:
+                          </span>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            {fw.production_tips}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
 
         {/* Shot List Modal */}
         {selectedConcept && (

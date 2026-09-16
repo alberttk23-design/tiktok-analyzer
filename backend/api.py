@@ -182,6 +182,14 @@ def get_audio_summary_endpoint(keyword: Optional[str] = Query(None)):
     return db.get_niche_audio_summary(kw)
 
 
+@app.get("/api/audio-intelligence")
+def get_audio_intelligence_endpoint(keyword: Optional[str] = Query(None)):
+    """Get full-featured Sound & Voice Intelligence (leaderboard, voice corpus, 4 frameworks)."""
+    kw = keyword or db.get_latest_keyword()
+    return db.get_full_audio_intelligence(kw)
+
+
+
 @app.get("/api/keywords")
 def get_keywords():
     """List all previously analyzed keywords and video counts."""
