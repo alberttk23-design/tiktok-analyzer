@@ -235,6 +235,23 @@ def init_db():
     )
     """)
 
+    # Niche Folders table for project / niche isolation
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS niche_folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT UNIQUE,
+        description TEXT DEFAULT '',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Populate niche_folders from any existing keywords in videos
+    cursor.execute("""
+    INSERT OR IGNORE INTO niche_folders (name)
+    SELECT DISTINCT keyword FROM videos WHERE keyword IS NOT NULL AND keyword != ''
+    """)
+
     conn.commit()
     conn.close()
 
@@ -600,18 +617,96 @@ def get_job(job_id):
     return None
 
 
-def get_all_keywords():
+def get_niche_folders():
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-    SELECT keyword, COUNT(*) as video_count, MAX(created_at) as last_updated
-    FROM videos
-    GROUP BY keyword
-    ORDER BY last_updated DESC
+    SELECT 
+        f.id,
+        f.name,
+        f.name as keyword,
+        f.description,
+        f.created_at,
+        f.updated_at,
+        COALESCE(v_stats.video_count, 0) as video_count,
+        COALESCE(v_stats.total_views, 0) as total_views,
+        COALESCE(v_stats.last_updated, f.created_at) as last_updated
+    FROM niche_folders f
+    LEFT JOIN (
+        SELECT keyword, COUNT(*) as video_count, SUM(views) as total_views, MAX(created_at) as last_updated
+        FROM videos
+        GROUP BY keyword
+    ) v_stats ON LOWER(f.name) = LOWER(v_stats.keyword)
+    ORDER BY video_count DESC, f.updated_at DESC
     """)
     rows = cursor.fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def get_all_keywords():
+    return get_niche_folders()
+
+
+def create_niche_folder(name: str, description: str = ""):
+    clean_name = name.strip()
+    if not clean_name:
+        raise ValueError("Tên thư mục ngách không được để trống")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO niche_folders (name, description, updated_at)
+    VALUES (?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(name) DO UPDATE SET
+        description = CASE WHEN excluded.description != '' THEN excluded.description ELSE niche_folders.description END,
+        updated_at = CURRENT_TIMESTAMP
+    """, (clean_name, description))
+    conn.commit()
+    conn.close()
+    return {"name": clean_name, "description": description}
+
+
+def delete_niche_folder(name: str, delete_data: bool = True):
+    clean_name = name.strip()
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM niche_folders WHERE name = ?", (clean_name,))
+    if delete_data:
+        cursor.execute("SELECT video_id FROM videos WHERE keyword = ?", (clean_name,))
+        vids = [r["video_id"] for r in cursor.fetchall()]
+        if vids:
+            placeholders = ",".join(["?"] * len(vids))
+            cursor.execute(f"DELETE FROM video_comments WHERE video_id IN ({placeholders})", vids)
+        cursor.execute("DELETE FROM videos WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM analysis_reviews WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM comment_insights WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM creative_ideas WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM production_briefs WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM master_analysis WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM crawl_jobs WHERE keyword = ?", (clean_name,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted", "name": clean_name}
+
+
+def rename_niche_folder(old_name: str, new_name: str):
+    old_c = old_name.strip()
+    new_c = new_name.strip()
+    if not new_c:
+        raise ValueError("Tên thư mục mới không được để trống")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE niche_folders SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?", (new_c, old_c))
+    cursor.execute("UPDATE videos SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE analysis_reviews SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE comment_insights SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE creative_ideas SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE production_briefs SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE master_analysis SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE crawl_jobs SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    conn.commit()
+    conn.close()
+    return {"old_name": old_c, "new_name": new_c}
 
 
 def get_results_by_keyword(keyword=None):
@@ -619,13 +714,18 @@ def get_results_by_keyword(keyword=None):
     cursor = conn.cursor()
 
     if not keyword:
-        cursor.execute("SELECT keyword FROM videos ORDER BY id DESC LIMIT 1")
+        cursor.execute("SELECT name FROM niche_folders ORDER BY updated_at DESC LIMIT 1")
         row = cursor.fetchone()
         if row:
-            keyword = row["keyword"]
+            keyword = row["name"]
         else:
-            conn.close()
-            return {"keyword": "", "videos": [], "reviews": [], "ideas": [], "briefs": [], "comment_insights": {}, "master_analysis": None}
+            cursor.execute("SELECT keyword FROM videos ORDER BY id DESC LIMIT 1")
+            row = cursor.fetchone()
+            if row:
+                keyword = row["keyword"]
+            else:
+                conn.close()
+                return {"keyword": "", "videos": [], "reviews": [], "ideas": [], "briefs": [], "comment_insights": {}, "master_analysis": None, "master_analyses": {}}
 
     cursor.execute("""
     SELECT * FROM videos WHERE keyword = ? ORDER BY score DESC

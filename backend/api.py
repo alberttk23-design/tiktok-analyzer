@@ -69,6 +69,15 @@ class CreatorBatchEnrichRequest(BaseModel):
     max_count: int = 20
 
 
+class CreateFolderRequest(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+
+class RenameFolderRequest(BaseModel):
+    new_name: str
+
+
 
 def execute_pipeline(job_id: str, keyword: str, limit: int):
     """Background task to run Crawler (with history check, 20 new videos, comments) and AI Analysis."""
@@ -169,6 +178,42 @@ def get_master_analysis_endpoint(keyword: Optional[str] = Query(None), engine: O
 def get_keywords():
     """List all previously analyzed keywords and video counts."""
     return db.get_all_keywords()
+
+
+@app.get("/api/folders")
+def get_folders_endpoint():
+    """List all niche folders with video count and total views."""
+    return {"folders": db.get_niche_folders()}
+
+
+@app.post("/api/folders")
+def create_folder_endpoint(req: CreateFolderRequest):
+    """Create a new niche folder for isolated keyword analysis."""
+    try:
+        created = db.create_niche_folder(req.name, req.description or "")
+        return {"status": "success", "folder": created}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/api/folders/{name}")
+def delete_folder_endpoint(name: str, delete_data: bool = True):
+    """Delete a niche folder and optionally its associated data."""
+    try:
+        res = db.delete_niche_folder(name, delete_data=delete_data)
+        return {"status": "success", "deleted": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/folders/{name}/rename")
+def rename_folder_endpoint(name: str, req: RenameFolderRequest):
+    """Rename a niche folder and update associated data."""
+    try:
+        res = db.rename_niche_folder(name, req.new_name)
+        return {"status": "success", "renamed": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.get("/api/history")

@@ -43,7 +43,21 @@ import {
   Mail,
   Send,
   Award,
+  FolderPlus,
+  Folder,
+  Trash2,
 } from "lucide-react";
+
+interface NicheFolder {
+  id?: number;
+  name: string;
+  keyword: string;
+  description?: string;
+  video_count: number;
+  total_views: number;
+  created_at: string;
+  updated_at: string;
+}
 
 interface VideoItem {
   id: number;
@@ -214,7 +228,6 @@ function App() {
   } | null>(null);
 
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
-  const [keywordsList, setKeywordsList] = useState<{ keyword: string; video_count: number }[]>([]);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc">("reviews");
@@ -226,6 +239,15 @@ function App() {
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("gemini_api_key") || "");
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
+
+  // Niche Folders states
+  const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
+  const [showCreateFolderModal, setShowCreateFolderModal] = useState<boolean>(false);
+  const [showManageFoldersModal, setShowManageFoldersModal] = useState<boolean>(false);
+  const [newFolderName, setNewFolderName] = useState<string>("");
+  const [newFolderDesc, setNewFolderDesc] = useState<string>("");
+  const [creatingFolder, setCreatingFolder] = useState<boolean>(false);
+  const [deletingFolderName, setDeletingFolderName] = useState<string | null>(null);
 
   // Video-specific comment crawl state
   const [crawlingCommentVid, setCrawlingCommentVid] = useState<string | null>(null);
@@ -256,6 +278,75 @@ function App() {
   const [kocSortOrder, setKocSortOrder] = useState<"desc" | "asc">("desc");
 
   const pollingRef = useRef<any>(null);
+
+  async function loadFolders() {
+    try {
+      const res = await fetch(`${API_BASE}/api/folders`);
+      if (res.ok) {
+        const json = await res.json();
+        const fList: NicheFolder[] = json.folders || [];
+        setFoldersList(fList);
+      }
+    } catch (e) {
+      console.error("Failed to load folders:", e);
+    }
+  }
+
+  async function handleCreateNewFolder() {
+    const trimmed = newFolderName.trim();
+    if (!trimmed || creatingFolder) return;
+    setCreatingFolder(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/folders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmed, description: newFolderDesc.trim() }),
+      });
+      if (res.ok) {
+        setNewFolderName("");
+        setNewFolderDesc("");
+        setShowCreateFolderModal(false);
+        await loadFolders();
+        setKeyword(trimmed);
+        await loadData(trimmed);
+      }
+    } catch (e) {
+      console.error("Create folder error:", e);
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
+  async function handleDeleteFolder(folderName: string) {
+    if (!confirm(`Bạn có chắc chắn muốn xóa thư mục ngách "${folderName}" cùng toàn bộ video & phân tích liên quan?`)) {
+      return;
+    }
+    setDeletingFolderName(folderName);
+    try {
+      const res = await fetch(`${API_BASE}/api/folders/${encodeURIComponent(folderName)}`, {
+        method: "DELETE",
+      });
+      if (res.ok) {
+        await loadFolders();
+        if (keyword === folderName) {
+          const remaining = foldersList.filter((f) => f.name !== folderName);
+          const nextKw = remaining.length > 0 ? remaining[0].name : "faux olive tree";
+          setKeyword(nextKw);
+          await loadData(nextKw);
+        }
+      }
+    } catch (e) {
+      console.error("Delete folder error:", e);
+    } finally {
+      setDeletingFolderName(null);
+    }
+  }
+
+  async function handleSwitchFolder(folderName: string) {
+    setKeyword(folderName);
+    await loadData(folderName);
+    setShowManageFoldersModal(false);
+  }
 
   async function loadCreators(targetKeyword?: string) {
     const kw = targetKeyword || keyword;
@@ -354,6 +445,7 @@ function App() {
       }
 
       loadCreators(kw);
+      loadFolders();
 
       const patUrl = `${API_BASE}/api/patterns?keyword=${encodeURIComponent(kw)}`;
       const patRes = await fetch(patUrl);
@@ -368,11 +460,7 @@ function App() {
 
   async function loadKeywords() {
     try {
-      const res = await fetch(`${API_BASE}/api/keywords`);
-      if (res.ok) {
-        const list = await res.json();
-        setKeywordsList(list);
-      }
+      await loadFolders();
       const histRes = await fetch(`${API_BASE}/api/history`);
       if (histRes.ok) {
         const hist = await histRes.json();
@@ -870,22 +958,47 @@ ${data.master_analysis.summary}\n`;
               </span>
             </div>
 
-            {keywordsList.length > 0 && (
+            {/* Niche Folder Controls */}
+            <div className="flex items-center gap-1.5 bg-slate-900/90 border border-slate-800 p-1 rounded-xl">
               <select
-                className="bg-slate-900/90 border border-slate-800 text-slate-200 text-xs px-3 py-2 rounded-xl outline-none focus:border-violet-500 cursor-pointer"
+                className="bg-transparent text-slate-200 text-xs px-2.5 py-1.5 rounded-lg outline-none cursor-pointer font-semibold max-w-[200px] truncate"
                 value={keyword}
                 onChange={(e) => {
-                  setKeyword(e.target.value);
-                  loadData(e.target.value);
+                  if (e.target.value === "__NEW_FOLDER__") {
+                    setShowCreateFolderModal(true);
+                  } else {
+                    handleSwitchFolder(e.target.value);
+                  }
                 }}
               >
-                {keywordsList.map((k) => (
-                  <option key={k.keyword} value={k.keyword}>
-                    📁 {k.keyword} ({k.video_count} videos)
+                {foldersList.map((f) => (
+                  <option key={f.name} value={f.name} className="bg-slate-900 text-slate-100">
+                    📁 {f.name} ({f.video_count} videos)
                   </option>
                 ))}
+                <option value="__NEW_FOLDER__" className="bg-slate-900 text-violet-400 font-bold">
+                  ➕ Tạo Thư Mục Ngách Mới...
+                </option>
               </select>
-            )}
+
+              <button
+                onClick={() => setShowCreateFolderModal(true)}
+                className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-violet-600/20"
+                title="Tạo Thư Mục / Ngách Mới Để Phân Tích Riêng"
+              >
+                <FolderPlus size={13} />
+                <span className="hidden sm:inline">+ Thư Mục Mới</span>
+              </button>
+
+              <button
+                onClick={() => setShowManageFoldersModal(true)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1 cursor-pointer"
+                title="Quản Lý Danh Sách Các Thư Mục Ngách"
+              >
+                <Folder size={13} className="text-amber-400" />
+                <span className="hidden md:inline">Quản Lý ({foldersList.length})</span>
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1032,6 +1145,29 @@ ${data.master_analysis.summary}\n`;
             </div>
           )}
         </div>
+
+        {/* Empty State Banner For Freshly Created Niche Folder */}
+        {data && data.videos && data.videos.length === 0 && !loading && (
+          <div className="bg-gradient-to-r from-violet-950/30 via-slate-900 to-slate-950 border border-violet-500/30 rounded-3xl p-6 md:p-8 text-center mb-6 shadow-xl animate-in fade-in duration-300">
+            <div className="w-14 h-14 rounded-2xl bg-violet-600/20 border border-violet-500/40 flex items-center justify-center mx-auto mb-3 text-violet-400 shadow-lg shadow-violet-600/10">
+              <FolderPlus size={28} />
+            </div>
+            <h3 className="text-xl md:text-2xl font-black text-white mb-2">
+              Thư Mục Ngách: <span className="text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-pink-400 font-extrabold">{keyword}</span>
+            </h3>
+            <p className="text-xs md:text-sm text-slate-300 max-w-xl mx-auto leading-relaxed mb-5">
+              Thư mục này chưa có video nào được cào. Toàn bộ video, dữ liệu bình luận và phân tích của ngách này sẽ được lưu trữ độc lập hoàn toàn với các ngách khác. Hãy bấm nút cào dữ liệu ở trên để bắt đầu phân tích!
+            </p>
+            <button
+              onClick={handleAnalyze}
+              disabled={loading}
+              className="bg-gradient-to-r from-violet-600 via-pink-600 to-purple-600 hover:opacity-90 text-white font-bold px-6 py-3 rounded-2xl text-xs md:text-sm inline-flex items-center gap-2 shadow-xl shadow-violet-600/30 transition cursor-pointer"
+            >
+              <Play size={16} />
+              <span>Bắt Đầu Cào {crawlLimit} Video Đầu Tiên Cho Ngách Này</span>
+            </button>
+          </div>
+        )}
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
@@ -3098,6 +3234,237 @@ ${data.master_analysis.summary}\n`;
                   className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer shadow-lg shadow-violet-600/30"
                 >
                   Lưu Cấu Hình
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Tạo Thư Mục Ngách Mới */}
+        {showCreateFolderModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-gradient-to-tr from-violet-600 to-pink-600 rounded-xl shadow-md text-white">
+                    <FolderPlus size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">Tạo Thư Mục Ngách Mới</h3>
+                    <p className="text-xs text-slate-400">Tách biệt hoàn toàn dữ liệu & phân tích cho từng sản phẩm</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowCreateFolderModal(false)}
+                  className="text-slate-400 hover:text-white text-lg font-bold px-2 py-1 rounded-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                    Tên từ khóa ngách (Keyword / Folder Name) <span className="text-pink-400">*</span>:
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: sunset lamp, led face mask, portable blender..."
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleCreateNewFolder()}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Quick suggestions */}
+                <div>
+                  <label className="text-[11px] font-medium text-slate-400 block mb-1.5">
+                    Gợi ý ngách TikTok Shop tiềm năng:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      "sunset lamp",
+                      "portable blender",
+                      "led face mask",
+                      "creatine gummies",
+                      "wireless car charger",
+                      "ice roller",
+                      "galaxy projector",
+                    ].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setNewFolderName(s)}
+                        className="text-[11px] bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-violet-500/50 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                      >
+                        + {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">
+                    Mô tả hoặc mục tiêu nghiên cứu (Tùy chọn):
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="VD: Test sản phẩm Q3, clone kịch bản viral, tìm KOC review..."
+                    value={newFolderDesc}
+                    onChange={(e) => setNewFolderDesc(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5">
+                <button
+                  onClick={() => setShowCreateFolderModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleCreateNewFolder}
+                  disabled={!newFolderName.trim() || creatingFolder}
+                  className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
+                >
+                  {creatingFolder ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Đang tạo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FolderPlus size={14} />
+                      <span>Tạo Thư Mục & Phân Tích Riêng</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Quản Lý Thư Mục Ngách */}
+        {showManageFoldersModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-2xl w-full p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-gradient-to-tr from-amber-500 to-orange-600 rounded-xl shadow-md text-white">
+                    <Folder size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">
+                      Quản Lý Thư Mục Ngách ({foldersList.length})
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Chuyển đổi phân tích giữa các ngách hoặc xóa làm sạch dữ liệu
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowManageFoldersModal(false)}
+                  className="text-slate-400 hover:text-white text-lg font-bold px-2 py-1 rounded-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-2.5 max-h-[60vh] overflow-y-auto pr-1 mb-6">
+                {foldersList.map((f) => {
+                  const isActive = f.name === keyword;
+                  return (
+                    <div
+                      key={f.name}
+                      className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        isActive
+                          ? "bg-slate-950/90 border-violet-500/50 shadow-md shadow-violet-500/10"
+                          : "bg-slate-950/40 border-slate-800 hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-white text-sm">📁 {f.name}</span>
+                          {isActive && (
+                            <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                              Đang xem
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-slate-400">
+                          <span>
+                            Video: <strong className="text-emerald-400">{f.video_count}</strong>
+                          </span>
+                          <span>&bull;</span>
+                          <span>
+                            Views: <strong className="text-blue-400">{(f.total_views || 0).toLocaleString()}</strong>
+                          </span>
+                          {f.description && (
+                            <>
+                              <span>&bull;</span>
+                              <span className="italic text-slate-500 line-clamp-1">{f.description}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center">
+                        {!isActive ? (
+                          <button
+                            onClick={() => handleSwitchFolder(f.name)}
+                            className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
+                          >
+                            Chuyển Sang
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500 font-medium px-2 py-1">Hiện tại</span>
+                        )}
+
+                        <button
+                          onClick={() => handleDeleteFolder(f.name)}
+                          disabled={deletingFolderName === f.name}
+                          className="bg-slate-800 hover:bg-rose-950 hover:text-rose-400 text-slate-400 p-2 rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+                          title="Xóa thư mục ngách và toàn bộ dữ liệu video liên quan"
+                        >
+                          {deletingFolderName === f.name ? (
+                            <Loader2 size={13} className="animate-spin" />
+                          ) : (
+                            <Trash2 size={13} />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {foldersList.length === 0 && (
+                  <div className="p-8 text-center text-slate-500 text-xs">
+                    Chưa có thư mục ngách nào được tạo.
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
+                <button
+                  onClick={() => {
+                    setShowManageFoldersModal(false);
+                    setShowCreateFolderModal(true);
+                  }}
+                  className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-violet-600/20 cursor-pointer"
+                >
+                  <FolderPlus size={13} />
+                  <span>+ Tạo Thư Mục Mới</span>
+                </button>
+
+                <button
+                  onClick={() => setShowManageFoldersModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Đóng
                 </button>
               </div>
             </div>
