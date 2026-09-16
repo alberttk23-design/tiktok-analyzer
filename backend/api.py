@@ -220,6 +220,16 @@ def get_voc_deep_endpoint(keyword: Optional[str] = Query(None)):
 
 
 
+@app.get("/api/caption-analytics")
+def get_caption_analytics_endpoint(keyword: Optional[str] = Query(None)):
+    """Get aggregated caption SEO analytics, hashtag frequencies and co-occurrences."""
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+    return db.get_caption_analytics(kw)
+
+
 @app.get("/api/keywords")
 def get_keywords():
     """List all previously analyzed keywords and video counts."""

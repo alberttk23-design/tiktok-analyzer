@@ -1014,6 +1014,8 @@ def get_results_by_keyword(keyword=None):
     # Note: Review backfilling now happens in the crawl/analyze pipeline (api.py execute_pipeline)
     # to avoid side-effect writes during GET requests.
 
+    caption_analytics = get_caption_analytics(keyword)
+
     return {
         "keyword": keyword,
         "videos": videos,
@@ -1026,11 +1028,83 @@ def get_results_by_keyword(keyword=None):
         "audio_summary": audio_summary,
         "audio_intelligence": audio_intelligence,
         "voc_deep": voc_deep,
+        "caption_analytics": caption_analytics,
         "comment_stats": {
             "total_tiktok_comments": total_tiktok_comments,
             "total_crawled_comments": total_crawled_comments,
             "crawl_percentage": crawl_pct
         }
+    }
+
+
+def get_caption_analytics(keyword: str) -> dict:
+    """
+    Analyze all video captions for a keyword:
+    - Extract top hashtags & frequencies
+    - Calculate co-occurring hashtag pairs (which tags creators post together)
+    - Extract top recurring multi-word phrases (SEO keywords)
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT caption, views, likes, saves FROM videos WHERE keyword = ?", (keyword,))
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        return {"top_hashtags": [], "top_pairs": [], "top_phrases": [], "avg_tags": 0, "total_videos": 0}
+
+    import re
+    from collections import Counter
+
+    tag_counts = Counter()
+    co_occur = Counter()
+    phrase_counts = Counter()
+    total_tags_count = 0
+
+    stop_words = {"the", "and", "a", "an", "in", "on", "at", "to", "for", "of", "with", "is", "this", "my", "your", "it", "so", "i", "you", "that", "are", "from"}
+
+    for r in rows:
+        cap = (r["caption"] or "").strip()
+        if not cap:
+            continue
+
+        # Extract hashtags
+        raw_tags = re.findall(r"#[a-zA-Z0-9_\-]+", cap.lower())
+        unique_tags = list(set(raw_tags))
+        total_tags_count += len(unique_tags)
+
+        for t in unique_tags:
+            tag_counts[t] += 1
+
+        # Co-occurring pairs
+        for i in range(len(unique_tags)):
+            for j in range(i + 1, len(unique_tags)):
+                pair = tuple(sorted([unique_tags[i], unique_tags[j]]))
+                co_occur[pair] += 1
+
+        # Extract clean text phrases (strip hashtags and URLs)
+        clean_text = re.sub(r"https?://\S+", "", cap)
+        clean_text = re.sub(r"#[a-zA-Z0-9_\-]+", "", clean_text)
+        clean_text = re.sub(r"@[a-zA-Z0-9_\-.]+", "", clean_text).lower()
+        words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_text) if w not in stop_words]
+
+        # 2-word n-grams
+        for k in range(len(words) - 1):
+            phrase = f"{words[k]} {words[k+1]}"
+            phrase_counts[phrase] += 1
+
+    total_vids = len(rows)
+    top_hashtags = [{"tag": tag, "count": count, "percentage": round((count / total_vids) * 100, 1)} for tag, count in tag_counts.most_common(15)]
+    top_pairs = [{"pair": f"{p[0]} + {p[1]}", "tag1": p[0], "tag2": p[1], "count": count, "percentage": round((count / total_vids) * 100, 1)} for p, count in co_occur.most_common(12)]
+    top_phrases = [{"phrase": phr, "count": count} for phr, count in phrase_counts.most_common(10) if count >= 2]
+    avg_tags = round(total_tags_count / max(total_vids, 1), 1)
+
+    return {
+        "top_hashtags": top_hashtags,
+        "top_pairs": top_pairs,
+        "top_phrases": top_phrases,
+        "avg_tags": avg_tags,
+        "total_videos": total_vids
     }
 
 

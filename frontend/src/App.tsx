@@ -43,6 +43,8 @@ import {
   Send,
   Award,
   FolderPlus,
+  Hash,
+  Tag,
   Folder,
   Trash2,
   Music,
@@ -286,6 +288,13 @@ function App() {
     };
     audio_intelligence?: any;
     voc_deep?: any;
+    caption_analytics?: {
+      top_hashtags: { tag: string; count: number; percentage: number }[];
+      top_pairs: { pair: string; tag1: string; tag2: string; count: number; percentage: number }[];
+      top_phrases: { phrase: string; count: number }[];
+      avg_tags: number;
+      total_videos: number;
+    };
     comment_stats?: {
       total_tiktok_comments: number;
       total_crawled_comments: number;
@@ -338,6 +347,9 @@ function App() {
   const [analyzingMultimodalVid, setAnalyzingMultimodalVid] = useState<string | null>(null);
   const [analyzingTopMultimodal, setAnalyzingTopMultimodal] = useState(false);
   const [selectedAngleFilter, setSelectedAngleFilter] = useState<string>("all");
+  const [selectedHashtagFilter, setSelectedHashtagFilter] = useState<string>("all");
+  const [showCaptionAnalytics, setShowCaptionAnalytics] = useState<boolean>(true);
+  const [copiedCaptionId, setCopiedCaptionId] = useState<string | null>(null);
 
   // Sorting & Filtering states (Score, Views, Tym/Likes, Lưu/Saves, Comments, Engagement)
   const [sortBy, setSortBy] = useState<"score" | "views" | "likes" | "saves" | "comments" | "engagement">("score");
@@ -2442,6 +2454,107 @@ ${data.master_analysis.summary}\n`;
               </div>
             </div>
 
+            {/* CAPTION & HASHTAG SEO TREND ANALYTICS */}
+            {data?.caption_analytics && data.caption_analytics.top_hashtags?.length > 0 && (
+              <div className="bg-gradient-to-r from-sky-950/40 via-slate-900/90 to-indigo-950/40 border border-sky-800/40 rounded-3xl p-4 md:p-5 shadow-xl">
+                <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowCaptionAnalytics(!showCaptionAnalytics)}>
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                      <Hash size={16} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-sm md:text-base font-bold text-white">Thống Kê Caption & Cặp Hashtag Xu Hướng (SEO TikTok)</h3>
+                        <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-mono">
+                          {data.caption_analytics.total_videos} video &bull; TB {data.caption_analytics.avg_tags} tags/video
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">Khám phá các hashtag và cụm từ khóa mà các video triệu view hay đăng chung với nhau</p>
+                    </div>
+                  </div>
+                  <button className="text-xs text-sky-400 hover:text-sky-300 font-semibold px-2.5 py-1 bg-sky-950/60 border border-sky-800/60 rounded-xl transition cursor-pointer">
+                    {showCaptionAnalytics ? "Thu gọn ▲" : "Mở rộng ▼"}
+                  </button>
+                </div>
+
+                {showCaptionAnalytics && (
+                  <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-4">
+                    {/* Row 1: Top Hashtags with filter */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1">
+                          <Tag size={12} /> Top 15 Hashtag Phổ Biến Nhất Ngách (Bấm để lọc):
+                        </span>
+                        {selectedHashtagFilter !== "all" && (
+                          <button
+                            onClick={() => setSelectedHashtagFilter("all")}
+                            className="text-[11px] text-pink-400 hover:underline font-semibold cursor-pointer"
+                          >
+                            ✕ Xóa lọc thẻ (Đang lọc: {selectedHashtagFilter})
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {data.caption_analytics.top_hashtags.map((item, hIdx) => {
+                          const isActive = selectedHashtagFilter.toLowerCase() === item.tag.toLowerCase();
+                          return (
+                            <button
+                              key={hIdx}
+                              onClick={() => setSelectedHashtagFilter(isActive ? "all" : item.tag)}
+                              className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
+                                isActive
+                                  ? "bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-500/30 font-bold"
+                                  : "bg-slate-950/80 text-slate-300 border-slate-800 hover:border-sky-700/80 hover:text-sky-200"
+                              }`}
+                              title={`Lọc danh sách theo ${item.tag}`}
+                            >
+                              <span className="font-semibold">{item.tag}</span>
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? "bg-sky-700 text-white" : "bg-slate-800 text-slate-400"}`}>
+                                {item.count} ({item.percentage}%)
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Row 2: Top Co-occurring Pairs & Top Phrases */}
+                    <div className="grid md:grid-cols-2 gap-3 pt-1">
+                      {/* Pairs */}
+                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3">
+                        <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <span>🔗 Các Cặp Hashtag Hay Đi Chung Nhất:</span>
+                        </h4>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {data.caption_analytics.top_pairs.slice(0, 8).map((p, pIdx) => (
+                            <div key={pIdx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-slate-900/60 border border-slate-800/50">
+                              <span className="font-mono text-indigo-200">{p.pair}</span>
+                              <span className="text-[11px] font-semibold text-slate-400">{p.count} video ({p.percentage}%)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Phrases */}
+                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3">
+                        <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1">
+                          <span>💡 Cụm Từ Khóa SEO Phổ Biến Trong Caption:</span>
+                        </h4>
+                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                          {data.caption_analytics.top_phrases.slice(0, 8).map((phr, phrIdx) => (
+                            <div key={phrIdx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-slate-900/60 border border-slate-800/50">
+                              <span className="text-slate-200 capitalize font-medium">&ldquo;{phr.phrase}&rdquo;</span>
+                              <span className="text-[11px] font-semibold text-slate-400">{phr.count} lần</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {(!data?.videos || data.videos.length === 0) ? (
               <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
                 <Brain size={40} className="mx-auto mb-3 text-slate-600" />
@@ -2452,10 +2565,16 @@ ${data.master_analysis.summary}\n`;
               <div className="grid gap-4">
                 {sortedFilteredVideos
                   .filter((vid) => {
-                    if (selectedAngleFilter === "all") return true;
-                    const r = reviewMap.get(vid.video_id);
-                    const ang = r?.ad_angle || "";
-                    return ang.toLowerCase().includes(selectedAngleFilter.toLowerCase());
+                    if (selectedAngleFilter !== "all") {
+                      const r = reviewMap.get(vid.video_id);
+                      const ang = r?.ad_angle || "";
+                      if (!ang.toLowerCase().includes(selectedAngleFilter.toLowerCase())) return false;
+                    }
+                    if (selectedHashtagFilter !== "all") {
+                      const cap = (vid.caption || "").toLowerCase();
+                      if (!cap.includes(selectedHashtagFilter.toLowerCase())) return false;
+                    }
+                    return true;
                   })
                   .map((vid, idx) => {
                   const rev = reviewMap.get(vid.video_id);
@@ -2536,83 +2655,80 @@ ${data.master_analysis.summary}\n`;
 
                       {/* 4 Pillars Grid */}
                       <div className="grid md:grid-cols-2 gap-3.5 mt-4">
-                        {/* 1. Hook */}
-                        {/* 1. Hook */}
+                        {/* 1. Caption & SEO Tags */}
                         <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5 flex flex-col justify-between">
                           <div>
                             <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-pink-400 uppercase tracking-wider">
-                                <span>🎣 Hook Mở Đầu (0-3 giây)</span>
+                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 uppercase tracking-wider">
+                                <span>📝 Caption & Hashtags Bài Đăng</span>
                               </div>
-                              {((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) ? (
-                                <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
-                                  🎯 Multimodal AI (Whisper + Qwen)
-                                </span>
-                              ) : (
-                                <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
-                                  📊 Dự đoán sơ bộ (Metadata)
-                                </span>
-                              )}
-                            </div>
-
-                            {((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) ? (
-                              <div className="space-y-2">
-                                {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") && (
-                                  <div className="bg-pink-950/30 border border-pink-900/40 rounded-xl p-2.5">
-                                    <div className="text-[10px] font-bold uppercase tracking-wider text-pink-400 mb-0.5 flex items-center gap-1">
-                                      <span>🎙️ Lời thoại mở đầu (0-3s)</span>
-                                    </div>
-                                    <p className="text-xs md:text-sm text-pink-100 font-medium leading-relaxed italic">
-                                      &ldquo;{rev.spoken_hook}&rdquo;
-                                    </p>
-                                  </div>
-                                )}
-                                {rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác" && (
-                                  <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 border border-slate-800 rounded-xl p-2.5">
-                                    <p className="flex items-start gap-1.5">
-                                      <strong className="text-violet-400 font-semibold whitespace-nowrap">👁️ Thị giác:</strong>
-                                      <span className="text-slate-200">{rev.visual_hook} {rev.setting && rev.setting !== "Chưa xác định" ? `(${rev.setting.toLowerCase()})` : ""}</span>
-                                    </p>
-                                    {rev?.on_screen_text && rev.on_screen_text !== "None" && rev.on_screen_text !== "Không có" && (
-                                      <p className="flex items-start gap-1.5 text-[11px]">
-                                        <strong className="text-amber-400 font-semibold whitespace-nowrap">🔤 Chữ trên video:</strong>
-                                        <span className="font-mono text-slate-300">&ldquo;{rev.on_screen_text}&rdquo;</span>
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div>
-                                <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                                  {rev?.hook || "Hook trực quan mở đầu bằng demo thực tế sản phẩm để giữ chân người xem."}
-                                </p>
-                              </div>
-                            )}
-                          </div>
-
-                          {!((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) && (
-                            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
-                              <span className="text-[11px] text-slate-400">Chưa tải stream & soi khung hình</span>
                               <button
-                                onClick={() => handleRunMultimodal(vid.video_id)}
-                                disabled={analyzingMultimodalVid === vid.video_id}
-                                className="text-[11px] font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1 transition bg-pink-500/10 border border-pink-500/20 hover:bg-pink-500/20 px-2 py-1 rounded-lg cursor-pointer disabled:opacity-50"
+                                onClick={() => {
+                                  if (vid.caption) {
+                                    navigator.clipboard.writeText(vid.caption);
+                                    setCopiedCaptionId(vid.video_id);
+                                    setTimeout(() => setCopiedCaptionId(null), 2000);
+                                  }
+                                }}
+                                className="text-[10px] text-slate-400 hover:text-sky-300 flex items-center gap-1 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded cursor-pointer transition"
+                                title="Sao chép toàn bộ caption"
                               >
-                                {analyzingMultimodalVid === vid.video_id ? (
+                                {copiedCaptionId === vid.video_id ? (
                                   <>
-                                    <Loader2 size={11} className="animate-spin" />
-                                    <span>Đang bóc băng...</span>
+                                    <Check size={10} className="text-emerald-400" />
+                                    <span className="text-emerald-400 font-semibold">Đã copy</span>
                                   </>
                                 ) : (
                                   <>
-                                    <Zap size={11} className="text-yellow-400" />
-                                    <span>⚡ Bóc Băng Video Này</span>
+                                    <Copy size={10} />
+                                    <span>Copy</span>
                                   </>
                                 )}
                               </button>
                             </div>
-                          )}
+
+                            {/* Clean Caption Text & Hashtags */}
+                            {(() => {
+                              const fullCaption = vid.caption || "";
+                              const rawTags = (fullCaption.match(/#[a-zA-Z0-9_\-]+/g) || []);
+                              const cleanText = fullCaption.replace(/#[a-zA-Z0-9_\-]+/g, "").replace(/https?:\/\/\S+/g, "").trim();
+
+                              return (
+                                <div className="space-y-2">
+                                  {cleanText ? (
+                                    <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
+                                      &ldquo;{cleanText}&rdquo;
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-slate-500 italic">
+                                      Video này creator không viết lời mô tả, chỉ gắn thẻ hashtags.
+                                    </p>
+                                  )}
+
+                                  {/* Hashtag Badges */}
+                                  {rawTags.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 pt-1">
+                                      {rawTags.map((tag, tIdx) => (
+                                        <span
+                                          key={tIdx}
+                                          onClick={() => setSelectedHashtagFilter(tag)}
+                                          className="text-[10px] bg-sky-950/60 border border-sky-800/60 text-sky-300 px-1.5 py-0.5 rounded-md hover:bg-sky-900/80 cursor-pointer transition font-mono"
+                                          title={`Bấm để lọc các video có thẻ ${tag}`}
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+
+                          <div className="mt-2.5 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500">
+                            <span>{(vid.caption || "").length} ký tự</span>
+                            <span>{((vid.caption || "").match(/#[a-zA-Z0-9_\-]+/g) || []).length} thẻ hashtags</span>
+                          </div>
                         </div>
 
                         {/* 2. Viral Mechanics */}
