@@ -115,6 +115,68 @@ def generate_niche_search_queries(base_keyword: str) -> list:
     return result
 
 
+def load_and_ensure_search_results(page, search_url: str, query_str: str, max_retries: int = 3) -> bool:
+    """
+    Load TikTok search page and strictly guarantee that video cards / results
+    are loaded into the DOM. If the page lags, shows 'Something went wrong',
+    or fails to render video cards, automatically clicks 'Try again' or reloads (F5).
+    """
+    for attempt in range(1, max_retries + 1):
+        print(f"[Crawler] Loading search vector '{query_str}' (Attempt {attempt}/{max_retries})...")
+        try:
+            if attempt == 1:
+                page.goto(search_url, timeout=45000)
+            else:
+                print(f"[Crawler] Refreshing (F5) page for '{query_str}'...")
+                page.reload(wait_until="domcontentloaded", timeout=45000)
+
+            page.wait_for_load_state("domcontentloaded")
+            page.wait_for_timeout(3000)
+        except Exception as e:
+            print(f"[Crawler] Navigation attempt {attempt} notice: {e}")
+
+        # Auto-dismiss modal / login popups
+        try:
+            page.keyboard.press("Escape")
+            page.evaluate("""() => {
+                const modalClose = document.querySelector('[data-e2e="modal-close-inner-button"], button[aria-label="Close"]');
+                if (modalClose) modalClose.click();
+            }""")
+        except Exception:
+            pass
+
+        # Check if error screen or "Try again" button is present
+        has_err = page.evaluate("""() => {
+            const errTitle = document.querySelector('[data-e2e="search-error-title"]');
+            const btns = Array.from(document.querySelectorAll('button')).map(b => b.innerText.trim());
+            return Boolean(errTitle || btns.includes('Try again'));
+        }""")
+
+        if has_err:
+            print(f"[Crawler] TikTok showed 'Something went wrong' on '{query_str}'. Attempting recovery via 'Try again' / F5...")
+            try:
+                page.click("text='Try again'", timeout=2500)
+                page.wait_for_timeout(3000)
+            except Exception:
+                page.reload(wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(3500)
+
+        # Count actual video card elements in DOM
+        cards_count = page.evaluate("""() => {
+            return document.querySelectorAll('[data-e2e*="search_top-item"], [data-e2e*="search-item"], [class*="DivItemContainer"]').length;
+        }""")
+
+        if cards_count > 0:
+            print(f"[Crawler] Successfully verified {cards_count} video cards loaded for '{query_str}'!")
+            return True
+        else:
+            print(f"[Crawler] Notice: 0 video cards found on attempt {attempt}. Will retry/F5...")
+            page.wait_for_timeout(2000)
+
+    print(f"[Crawler] Could not load video cards for '{query_str}' after {max_retries} attempts.")
+    return False
+
+
 def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
     """
     Search TikTok using Multi-Vector Query Expansion, filter out existing URLs from DB history,
@@ -233,43 +295,20 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                     message=f"Scanning vector '{query_str}' ({len(discovered_new_videos)}/{target_count} new videos found)..."
                 )
 
-            try:
-                page.goto(search_url, timeout=45000)
-                page.wait_for_load_state("domcontentloaded")
-                page.wait_for_timeout(3500)
-            except Exception as e:
-                print(f"[Crawler] Vector navigation error for '{query_str}': {e}")
+            # Load page and guarantee video cards are rendered (auto-reloads / F5 if lagged or 'Something went wrong')
+            loaded = load_and_ensure_search_results(page, search_url, query_str, max_retries=3)
+            if not loaded:
+                print(f"[Crawler] Skipping vector '{query_str}' because video cards failed to render after F5 retries.")
                 continue
-
-            # Auto-dismiss modal / login popups
-            try:
-                page.keyboard.press("Escape")
-                page.evaluate("""() => {
-                    const modalClose = document.querySelector('[data-e2e="modal-close-inner-button"], button[aria-label="Close"]');
-                    if (modalClose) modalClose.click();
-                }""")
-            except Exception:
-                pass
-
-            # Auto-recover if "Something went wrong" error screen appears
-            try:
-                has_err = page.evaluate("() => Boolean(document.querySelector('[data-e2e=\"search-error-title\"]'))")
-                if has_err:
-                    print(f"[Crawler] Notice 'Something went wrong' on '{query_str}', attempting auto-recovery...")
-                    try:
-                        page.click("text='Videos'", timeout=3000)
-                        page.wait_for_timeout(3000)
-                    except Exception:
-                        page.reload()
-                        page.wait_for_timeout(3500)
-            except Exception:
-                pass
 
             # Scale scroll depth based on desired batch size (more scrolls if targeting 100-200)
             max_scrolls_per_query = 35 if target_count >= 100 else (25 if target_count >= 50 else 18)
             max_stagnant = 7
             consecutive_stagnant = 0
             last_total_seen = len(seen_in_session)
+            last_dom_cards = page.evaluate("""() => {
+                return document.querySelectorAll('[data-e2e*="search_top-item"], [data-e2e*="search-item"], [class*="DivItemContainer"]').length;
+            }""")
 
             for scroll_idx in range(max_scrolls_per_query):
                 if len(discovered_new_videos) >= target_count:
@@ -298,7 +337,16 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 time.sleep(wait_delay)
 
                 current_total_seen = len(seen_in_session)
-                if current_total_seen == last_total_seen:
+                current_dom_cards = page.evaluate("""() => {
+                    return document.querySelectorAll('[data-e2e*="search_top-item"], [data-e2e*="search-item"], [class*="DivItemContainer"]').length;
+                }""")
+
+                # Dual progress check: network stream OR DOM cards count increase
+                if current_total_seen > last_total_seen or current_dom_cards > last_dom_cards:
+                    consecutive_stagnant = 0
+                    last_total_seen = current_total_seen
+                    last_dom_cards = current_dom_cards
+                else:
                     consecutive_stagnant += 1
                     print(f"[Crawler] Vector '{query_str}': waiting/retrying scroll ({consecutive_stagnant}/{max_stagnant})...")
 
@@ -310,9 +358,6 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                     if consecutive_stagnant >= max_stagnant:
                         print(f"[Crawler] Vector '{query_str}' exhausted after {max_stagnant} thorough retries. Switching to next vector.")
                         break
-                else:
-                    consecutive_stagnant = 0
-                    last_total_seen = current_total_seen
 
                 if job_id:
                     pct = 15 + min(40, int((len(discovered_new_videos) / target_count) * 40))
