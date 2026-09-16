@@ -1746,7 +1746,7 @@ ${data.master_analysis.summary}\n`;
                             Tiếng Nói Khách Hàng &amp; Ma Trận Rào Cản Tâm Lý ({totalCommentsAnalyzed.toLocaleString()} Bình Luận)
                           </h3>
                           <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-                            Khảo sát sâu sắc từ hàng ngàn bình luận thực tế trên TikTok. Bóc tách chính xác những băn khoăn về bám bụi, nguy cơ đổ ngã trẻ nhỏ/chó mèo, hoài nghi lá nhựa bóng và cuộc chiến giá với Pottery Barn / Costco.
+                            Khảo sát sâu sắc từ hàng ngàn bình luận thực tế trên TikTok cho ngách '{keyword}'. Bóc tách chính xác những băn khoăn về chất lượng, giá bán, độ bền, và các rào cản tâm lý ngăn cản khách hàng xuống tiền.
                           </p>
                         </div>
 
@@ -1812,19 +1812,30 @@ ${data.master_analysis.summary}\n`;
 
                       {/* Comments Crawl Progress Bar */}
                       {data?.comment_stats && (
-                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-slate-300">Tiến độ cào dữ liệu bình luận toàn ngách:</span>
-                            <span className="font-mono text-purple-400 font-bold">
-                              {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
-                            </span>
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold text-slate-300">Độ phủ bình luận toàn ngách:</span>
+                              <span className="font-mono text-purple-400 font-bold">
+                                {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
+                              </span>
+                              {data.comment_stats.crawl_percentage >= 70 && (
+                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
+                                  <CheckCircle2 size={11} />
+                                  Đã vét 99% video toàn ngách (Đạt tối đa khả dụng)
+                                </span>
+                              )}
+                            </div>
+                            <div className="w-full md:w-64 bg-slate-800 rounded-full h-2.5 overflow-hidden shrink-0">
+                              <div
+                                className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
+                              />
+                            </div>
                           </div>
-                          <div className="w-full md:w-64 bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                            <div
-                              className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
-                            />
-                          </div>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">
+                            ℹ️ <em>Lưu ý kỹ thuật:</em> Con số {data.comment_stats.total_tiktok_comments.toLocaleString()} trên TikTok là tổng đếm trên server (bao gồm comment bot/spam bị TikTok ẩn, comment người dùng đã xóa, và câu trả lời của chủ shop mà tool chủ động loại bỏ để giữ tệp dữ liệu khách hàng sạch nhất). Số lượng <strong>{data.comment_stats.total_crawled_comments.toLocaleString()}</strong> bình luận trong máy bạn đã là 100% lượng bình luận thật có thể đọc được từ TikTok.
+                          </p>
                         </div>
                       )}
 

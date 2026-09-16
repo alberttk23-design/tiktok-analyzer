@@ -344,7 +344,7 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
                 CASE WHEN COUNT(vc.cid) = 0 THEN 0 ELSE 1 END ASC,
                 uncrawled_gap DESC, 
                 v.comments DESC
-            LIMIT 120
+            LIMIT 500
             """, (keyword,))
         else:
             cursor.execute("""
