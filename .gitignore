@@ -40,6 +40,8 @@ data/tiktok_debug.*
 # Local Database (Auto-created on start)
 data/*.db
 data/*.db-journal
+data/*.db-wal
+data/*.db-shm
 
 # Environment
 .env
