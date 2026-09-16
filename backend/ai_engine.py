@@ -554,7 +554,7 @@ def generate_gemini_master_analysis(keyword: str, api_key: str = None) -> dict:
     gemini_data = None
 
     if resolved_key:
-        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
         for model_name in candidate_models:
             try:
                 print(f"[AI Engine] Calling Google Gemini API with model '{model_name}'...")

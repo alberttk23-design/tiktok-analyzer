@@ -594,6 +594,39 @@ def update_multimodal_analysis(video_id: str, data: dict):
         kf_json,
         str(video_id)
     ))
+
+    if cursor.rowcount == 0:
+        cursor.execute("SELECT keyword, caption, score FROM videos WHERE video_id = ?", (str(video_id),))
+        v_row = cursor.fetchone()
+        kw = v_row["keyword"] if v_row else "default"
+        v_score = v_row["score"] if v_row else 50.0
+        spoken = data.get("spoken_hook", "")
+        visual = data.get("visual_hook", "")
+        hook_val = spoken or visual or "Visual Hook từ Video"
+        cursor.execute("""
+        INSERT INTO analysis_reviews (
+            video_id, keyword, transcript, spoken_hook, visual_hook,
+            setting, on_screen_text, visual_style, ad_angle, keyframes_json,
+            hook, viral, buyer_psychology, winning_formula, viral_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            str(video_id),
+            kw,
+            data.get("transcript", ""),
+            spoken,
+            visual,
+            data.get("setting", ""),
+            data.get("on_screen_text", ""),
+            data.get("visual_style", ""),
+            data.get("ad_angle", "Aesthetic Room Tour"),
+            kf_json,
+            hook_val,
+            "Video có đòn bẩy thị giác và âm thanh được giải mã bằng AI Multimodal.",
+            "Tác động vào tâm lý trực quan của người xem trong 3 giây đầu.",
+            "Hook 0-3s -> Proof -> CTA",
+            v_score
+        ))
+
     conn.commit()
     conn.close()
 

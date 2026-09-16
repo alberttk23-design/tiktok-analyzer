@@ -881,15 +881,24 @@ ${data.master_analysis.summary}\n`;
       if (res.ok) {
         const json = await res.json();
         if (json.data && data) {
-          const updatedReviews = data.reviews.map((r) => {
-            if (r.video_id === videoId) {
-              return {
-                ...r,
-                ...json.data,
-              };
-            }
-            return r;
-          });
+          let updatedReviews = [...(data.reviews || [])];
+          const exists = updatedReviews.some((r) => r.video_id === videoId);
+          if (exists) {
+            updatedReviews = updatedReviews.map((r) => {
+              if (r.video_id === videoId) {
+                return {
+                  ...r,
+                  ...json.data,
+                };
+              }
+              return r;
+            });
+          } else {
+            updatedReviews.push({
+              video_id: videoId,
+              ...json.data,
+            });
+          }
 
           setData({
             ...data,

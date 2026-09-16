@@ -137,42 +137,40 @@ Return ONLY valid JSON."""
             json={
                 "model": VISION_MODEL,
                 "prompt": prompt,
+                "system": "You are a concise visual hook analyst. Respond immediately with valid JSON.",
                 "images": [b64_image],
                 "stream": False,
                 "options": {
                     "temperature": 0.1,
-                    "num_ctx": 4096
+                    "num_predict": 300,
+                    "num_ctx": 8192
                 }
             },
-            timeout=60
+            timeout=120
         )
         
         if resp.status_code == 200:
             result_text = resp.json().get("response", "").strip()
-            # Clean markdown formatting if present
-            if result_text.startswith("```json"):
-                result_text = result_text[7:]
-            if result_text.startswith("```"):
-                result_text = result_text[3:]
-            if result_text.endswith("```"):
-                result_text = result_text[:-3]
-            result_text = result_text.strip()
-            
-            try:
-                parsed = json.loads(result_text)
+            from backend.ai_engine import extract_json
+            import re
+            parsed = extract_json(result_text)
+            if parsed and isinstance(parsed, dict):
                 return {
-                    "visual_hook": parsed.get("visual_hook", ""),
-                    "setting": parsed.get("setting", ""),
-                    "on_screen_text": parsed.get("on_screen_text", ""),
+                    "visual_hook": parsed.get("visual_hook", "") or "Cận cảnh chi tiết sản phẩm",
+                    "setting": parsed.get("setting", "") or "Không gian nội thất",
+                    "on_screen_text": parsed.get("on_screen_text", "") or "Không có",
                     "visual_style": parsed.get("visual_style", "Aesthetic Room Tour")
                 }
-            except Exception:
+            else:
+                clean_txt = re.sub(r'<think>.*?</think>', '', result_text, flags=re.DOTALL).strip()
                 return {
-                    "visual_hook": result_text[:200],
+                    "visual_hook": clean_txt[:200] if clean_txt else "Cận cảnh chi tiết sản phẩm",
                     "setting": "Không gian nội thất",
                     "on_screen_text": "Xem khung hình",
                     "visual_style": "Product Showcase"
                 }
+        else:
+            logger.warning(f"Ollama vision response {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
         logger.error(f"Error calling Ollama vision model: {e}")
 
@@ -222,6 +220,8 @@ def analyze_video_multimodal_full(video_url: str, video_id: str, caption: str = 
         vision_res = analyze_keyframes_with_qwen(keyframes, caption=caption)
         
         # Relative URLs or paths for keyframes so UI can show them
+        keyframe_urls = [f"/api/keyframe/{Path(p).name}" for p in keyframes] if keyframes else []
+
         # Step 4: Refine sound type based on Whisper audio transcription
         trans = audio_res.get("transcript", "").strip()
         spoken = audio_res.get("spoken_hook", "")
