@@ -254,54 +254,114 @@ def get_history():
 @app.post("/api/crawl-top-comments")
 def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: BackgroundTasks):
     """
-    Batch crawl up to 1000 comments across top N videos for a keyword,
-    extract Voice-of-Customer topic clusters, and update the Master Holistic Analysis.
+    Batch crawl comments across videos for a keyword:
+    1. Prioritizes videos with 0 comments crawled or largest uncrawled gap.
+    2. Deeply fetches discussion threads and replies.
+    3. Tracks live job status so the UI can display real-time progress.
+    4. Regenerates VoC Deep Consumer Psychology upon completion.
     """
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="Keyword is required")
 
+    job_id = f"batch_comments_{uuid.uuid4().hex[:8]}"
+    db.create_job(job_id, keyword)
+
     def run_batch_crawl():
         conn = db.get_db()
         cursor = conn.cursor()
         if req.crawl_all:
+            # Query videos ordered by:
+            # 1. Videos that have never been crawled yet (actual_crawled = 0)
+            # 2. Videos with the largest gap between TikTok comment stat and actual crawled comments
             cursor.execute("""
-            SELECT video_id, creator, comments FROM videos 
-            WHERE keyword = ? AND comments > 0 ORDER BY comments DESC LIMIT 60
+            SELECT 
+                v.video_id, 
+                v.creator, 
+                v.comments,
+                COUNT(vc.cid) as actual_crawled,
+                (v.comments - COUNT(vc.cid)) as uncrawled_gap
+            FROM videos v
+            LEFT JOIN video_comments vc ON v.video_id = vc.video_id
+            WHERE v.keyword = ? AND v.comments > 0
+            GROUP BY v.video_id
+            ORDER BY 
+                CASE WHEN COUNT(vc.cid) = 0 THEN 0 ELSE 1 END ASC,
+                uncrawled_gap DESC, 
+                v.comments DESC
+            LIMIT 120
             """, (keyword,))
         else:
             cursor.execute("""
-            SELECT video_id, creator, comments FROM videos 
-            WHERE keyword = ? AND comments > 0 ORDER BY comments DESC LIMIT ?
+            SELECT 
+                v.video_id, 
+                v.creator, 
+                v.comments,
+                COUNT(vc.cid) as actual_crawled,
+                (v.comments - COUNT(vc.cid)) as uncrawled_gap
+            FROM videos v
+            LEFT JOIN video_comments vc ON v.video_id = vc.video_id
+            WHERE v.keyword = ? AND v.comments > 0
+            GROUP BY v.video_id
+            ORDER BY v.comments DESC 
+            LIMIT ?
             """, (keyword, req.top_n))
-        top_vids = [dict(r) for r in cursor.fetchall()]
+        
+        target_vids = [dict(r) for r in cursor.fetchall()]
         conn.close()
 
+        total_vids = len(target_vids)
         total_new_crawled = 0
-        for v in top_vids:
+        total_fetched_session = 0
+
+        db.update_job(job_id, status="crawling", progress=5, message=f"Tìm thấy {total_vids} video cần cào bình luận. Bắt đầu quét...")
+
+        for idx, v in enumerate(target_vids):
             vid = v["video_id"]
-            author = v.get("creator")
-            max_limit = min(int(v.get("comments") or 100), 200) if req.crawl_all else req.max_comments_per_video
+            author = v.get("creator") or "creator"
+            stat_comments = int(v.get("comments") or 50)
+            max_limit = min(stat_comments, 1000) if req.crawl_all else req.max_comments_per_video
+
+            progress_pct = min(92, int(5 + ((idx + 1) / max(total_vids, 1)) * 85))
+            db.update_job(
+                job_id, 
+                status="crawling", 
+                progress=progress_pct, 
+                message=f"Đang cào video {idx + 1}/{total_vids} (@{author})... Đã thu thập +{total_new_crawled} bình luận mới."
+            )
+
             cmts = comment_crawler.fetch_comments_for_video(
                 video_id=vid,
                 max_comments=max_limit,
-                author_username=author
+                author_username=author,
+                include_replies=req.crawl_all
             )
             if cmts:
-                db.save_comments(vid, cmts)
+                new_added = db.save_comments(vid, cmts)
                 ins = comment_crawler.extract_comment_insights(cmts, keyword)
                 db.save_comment_insights(vid, keyword, ins)
-                total_new_crawled += len(cmts)
+                total_new_crawled += new_added
+                total_fetched_session += len(cmts)
 
-        # Regenerate master holistic analysis with the updated comments
+        # Regenerate master holistic analysis & VoC Deep with the updated comments
+        db.update_job(job_id, status="crawling", progress=95, message=f"Đang cập nhật phân tích VoC Deep Consumer Psychology (+{total_new_crawled} cmt mới)...")
         ai_engine.generate_master_holistic_analysis(keyword)
-        print(f"[API] Batch comments crawl complete for '{keyword}': {total_new_crawled} comments crawled.")
+        
+        db.update_job(
+            job_id, 
+            status="completed", 
+            progress=100, 
+            message=f"Hoàn thành! Đã cào {total_fetched_session} bình luận ({total_new_crawled} bình luận mới tinh).",
+            new_videos_count=total_new_crawled
+        )
+        print(f"[API] Batch comments crawl complete for '{keyword}': {total_new_crawled} brand new comments saved.")
 
     background_tasks.add_task(run_batch_crawl)
 
     target_msg = "toàn bộ video trong ngách" if req.crawl_all else f"top {req.top_n} videos"
     return {
         "status": "started",
+        "job_id": job_id,
         "keyword": keyword,
         "message": f"Started crawling comments for {target_msg}..."
     }

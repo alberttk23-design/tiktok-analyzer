@@ -340,6 +340,11 @@ function App() {
   const [tableSearch, setTableSearch] = useState<string>("");
   const [minViewsFilter, setMinViewsFilter] = useState<number>(0);
   const [batchCrawlingComments, setBatchCrawlingComments] = useState<boolean>(false);
+  const [commentCrawlJob, setCommentCrawlJob] = useState<{
+    jobId: string;
+    progress: number;
+    message: string;
+  } | null>(null);
 
   // Creator Intelligence & Booking states
   const [creatorsList, setCreatorsList] = useState<CreatorItem[]>([]);
@@ -708,28 +713,69 @@ function App() {
   async function handleBatchCrawlComments(crawlAll: boolean = false) {
     if (batchCrawlingComments || !keyword.trim()) return;
     setBatchCrawlingComments(true);
+    setCommentCrawlJob({
+      jobId: "",
+      progress: 5,
+      message: crawlAll ? "Đang chuẩn bị quét toàn bộ ngách & giải mã các thảo luận..." : "Đang chuẩn bị cào top video...",
+    });
     try {
       const res = await fetch(`${API_BASE}/api/crawl-top-comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           keyword: keyword.trim(),
-          top_n: crawlAll ? 60 : 10,
-          max_comments_per_video: crawlAll ? 200 : 100,
+          top_n: crawlAll ? 120 : 15,
+          max_comments_per_video: crawlAll ? 1000 : 100,
           crawl_all: crawlAll,
         }),
       });
       if (res.ok) {
-        setTimeout(async () => {
-          await loadData();
-          setBatchCrawlingComments(false);
-        }, 4000);
+        const json = await res.json();
+        const jobId = json.job_id;
+        if (!jobId) {
+          setTimeout(async () => {
+            await loadData();
+            setBatchCrawlingComments(false);
+            setCommentCrawlJob(null);
+          }, 3000);
+          return;
+        }
+
+        // Live polling job status every 1.5s
+        const pollInterval = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+            if (jRes.ok) {
+              const jData = await jRes.json();
+              if (jData && jData.job) {
+                const j = jData.job;
+                setCommentCrawlJob({
+                  jobId: j.job_id,
+                  progress: j.progress || 10,
+                  message: j.message || "Đang xử lý bình luận...",
+                });
+                if (j.status === "completed" || j.status === "failed") {
+                  clearInterval(pollInterval);
+                  await loadData();
+                  setTimeout(() => {
+                    setBatchCrawlingComments(false);
+                    setCommentCrawlJob(null);
+                  }, 1500);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Job poll error:", err);
+          }
+        }, 1500);
       } else {
         setBatchCrawlingComments(false);
+        setCommentCrawlJob(null);
       }
     } catch (e) {
       console.error("Batch crawl comments failed:", e);
       setBatchCrawlingComments(false);
+      setCommentCrawlJob(null);
     }
   }
 
@@ -1679,6 +1725,30 @@ ${data.master_analysis.summary}\n`;
                           </button>
                         </div>
                       </div>
+
+                      {/* Active Realtime Comment Crawl Banner */}
+                      {commentCrawlJob && (
+                        <div className="bg-gradient-to-r from-violet-950/70 via-slate-900 to-pink-950/50 border border-violet-500/50 rounded-2xl p-4 shadow-xl space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-bold text-violet-200 flex items-center gap-2">
+                              <Loader2 size={14} className="animate-spin text-pink-400" />
+                              {commentCrawlJob.message}
+                            </span>
+                            <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
+                              {commentCrawlJob.progress}%
+                            </span>
+                          </div>
+                          <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
+                            <div
+                              className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
+                              style={{ width: `${Math.min(100, Math.max(5, commentCrawlJob.progress))}%` }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-slate-400 italic">
+                            * Hệ thống đang ưu tiên quét các video chưa từng cào và bóc tách các luồng thảo luận/hỏi đáp chuyên sâu của khách hàng.
+                          </p>
+                        </div>
+                      )}
 
                       {/* Comments Crawl Progress Bar */}
                       {data?.comment_stats && (

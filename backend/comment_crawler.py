@@ -25,10 +25,87 @@ OBJECTION_KEYWORDS = [
 ]
 
 
-def fetch_comments_for_video(video_id: str, max_comments: int = 1000, author_username: str = None) -> List[Dict[str, Any]]:
+def fetch_replies_for_comment(video_id: str, comment_id: str, max_replies: int = 40, author_username: str = None) -> List[Dict[str, Any]]:
+    """
+    Fetch nested reply comments under a parent comment using TikTok's reply API endpoint.
+    """
+    replies = []
+    seen_cids = set()
+    cursor = 0
+    count_per_page = 20
+    author_norm = (author_username or "").lower().strip("@")
+    consecutive_empty = 0
+
+    while len(replies) < max_replies and consecutive_empty < 2:
+        url = f"https://www.tiktok.com/api/comment/list/reply/?aid=1988&item_id={video_id}&comment_id={comment_id}&count={count_per_page}&cursor={cursor}"
+        req = urllib.request.Request(
+            url,
+            headers={
+                "User-Agent": random.choice(USER_AGENTS),
+                "Accept": "application/json, text/plain, */*",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Referer": f"https://www.tiktok.com/video/{video_id}"
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=8) as response:
+                body = response.read().decode("utf-8")
+                data = json.loads(body)
+                c_list = data.get("comments") or []
+                if not c_list:
+                    consecutive_empty += 1
+                    break
+
+                consecutive_empty = 0
+                for c in c_list:
+                    cid = c.get("cid")
+                    if not cid or cid in seen_cids:
+                        continue
+                    seen_cids.add(cid)
+
+                    user_info = c.get("user") or {}
+                    uname = user_info.get("unique_id") or user_info.get("nickname") or ""
+                    if author_norm and uname.lower() == author_norm:
+                        continue
+
+                    text = (c.get("text") or "").strip()
+                    if not text:
+                        continue
+
+                    replies.append({
+                        "cid": str(cid),
+                        "video_id": str(video_id),
+                        "username": uname,
+                        "text": text,
+                        "digg_count": c.get("digg_count") or 0,
+                        "reply_count": 0,
+                        "created_time": c.get("create_time") or 0
+                    })
+
+                has_more = data.get("has_more", 0)
+                next_cursor = data.get("cursor", cursor + count_per_page)
+                if not has_more or next_cursor <= cursor or len(replies) >= max_replies:
+                    break
+                cursor = next_cursor
+                time.sleep(random.uniform(0.1, 0.25))
+        except Exception:
+            consecutive_empty += 1
+            break
+
+    return replies
+
+
+def fetch_comments_for_video(
+    video_id: str, 
+    max_comments: int = 1000, 
+    author_username: str = None,
+    include_replies: bool = False,
+    max_reply_threads: int = 15
+) -> List[Dict[str, Any]]:
     """
     Fetch up to max_comments for a video using TikTok's internal Web API.
     Excludes author replies and stops when target is reached or has_more is 0.
+    If include_replies is True, also fetches nested discussion replies for top comments.
     """
     base_url = "https://www.tiktok.com/api/comment/list/"
     all_comments = []
@@ -115,14 +192,38 @@ def fetch_comments_for_video(video_id: str, max_comments: int = 1000, author_use
 
                 cursor = next_cursor
                 # Polite jitter delay
-                time.sleep(random.uniform(0.15, 0.35))
+                time.sleep(random.uniform(0.12, 0.28))
 
         except Exception as e:
             print(f"[Comment Crawler] Request notice for cursor {cursor}: {e}")
             consecutive_empty += 1
             time.sleep(0.5)
 
-    print(f"[Comment Crawler] Fetched {len(all_comments)} non-author comments for video {video_id}.")
+    # Optional: fetch sub-replies for comments with discussion threads
+    if include_replies and len(all_comments) < max_comments:
+        parents_with_replies = [c for c in all_comments if c.get("reply_count", 0) > 0]
+        # Sort parents by reply_count or digg_count to prioritize richest discussion threads
+        parents_with_replies.sort(key=lambda x: (x.get("reply_count", 0), x.get("digg_count", 0)), reverse=True)
+        threads_to_crawl = parents_with_replies[:max_reply_threads]
+
+        for p in threads_to_crawl:
+            if len(all_comments) >= max_comments:
+                break
+            p_cid = p["cid"]
+            fetched_reps = fetch_replies_for_comment(
+                video_id=video_id,
+                comment_id=p_cid,
+                max_replies=min(p.get("reply_count", 10), 30),
+                author_username=author_username
+            )
+            for r in fetched_reps:
+                if r["cid"] not in seen_cids:
+                    seen_cids.add(r["cid"])
+                    all_comments.append(r)
+                    if len(all_comments) >= max_comments:
+                        break
+
+    print(f"[Comment Crawler] Fetched total {len(all_comments)} non-author comments for video {video_id}.")
     return all_comments
 
 

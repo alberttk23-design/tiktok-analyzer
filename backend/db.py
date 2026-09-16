@@ -353,12 +353,15 @@ def update_video_sound(video_id: str, sound_type: str, sound_title: str = "", so
     conn.close()
 
 
-def save_comments(video_id: str, comments: list):
-    """Batch save clean non-author comments to SQLite."""
+def save_comments(video_id: str, comments: list) -> int:
+    """Batch save clean non-author comments to SQLite and return count of newly inserted comments."""
     if not comments:
-        return
+        return 0
     conn = get_db()
     cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM video_comments WHERE video_id = ?", (str(video_id),))
+    before_count = cursor.fetchone()[0]
+
     for c in comments:
         cursor.execute("""
         INSERT INTO video_comments (
@@ -377,7 +380,11 @@ def save_comments(video_id: str, comments: list):
             int(c.get("created_time", 0))
         ))
     conn.commit()
+
+    cursor.execute("SELECT COUNT(*) FROM video_comments WHERE video_id = ?", (str(video_id),))
+    after_count = cursor.fetchone()[0]
     conn.close()
+    return max(0, after_count - before_count)
 
 
 def save_comment_insights(video_id: str, keyword: str, insights: dict):
