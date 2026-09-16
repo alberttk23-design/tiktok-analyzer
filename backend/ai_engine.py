@@ -554,11 +554,13 @@ def generate_gemini_master_analysis(keyword: str, api_key: str = None) -> dict:
     gemini_data = None
 
     if resolved_key:
-        try:
-            # Call Google Gemini API
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={resolved_key}"
-            prompt = f"""
-Bạn là giám đốc chiến lược sáng tạo TikTok DTC toàn cầu được hỗ trợ bởi trí tuệ Google DeepMind Gemini 3.8 Flash High.
+        candidate_models = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        for model_name in candidate_models:
+            try:
+                print(f"[AI Engine] Calling Google Gemini API with model '{model_name}'...")
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={resolved_key}"
+                prompt = f"""
+Bạn là giám đốc chiến lược sáng tạo TikTok DTC toàn cầu được hỗ trợ bởi trí tuệ Google DeepMind Gemini.
 Hãy phân tích toàn bộ cơ sở dữ liệu ngách sản phẩm "{keyword}" dựa trên {total_vids} video ({total_views:,} views, {total_saves:,} saves) và {len(raw_comments):,} bình luận người dùng thực tế:
 - Top video views khủng nhất: {', '.join(['@' + v['creator'] + ' (' + str(v['views']) + ' views)' for v in top_views_vids[:3]])}
 - Top video lưu nhiều nhất (Purchase Intent): {', '.join(['@' + v['creator'] + ' (' + str(v['saves']) + ' saves)' for v in top_saves_vids[:3]])}
@@ -584,22 +586,37 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ ĐẲNG CẤP CHIẾN LƯỢC DTC 
   "winning_blueprint": "Kịch bản vàng triệu view từng giây (0-3s Visual Shock -> 3-8s Proof/Objection Killer -> 8-14s Styling Secret -> 14-20s High Converting CTA)"
 }}
 """
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "temperature": 0.2,
-                    "responseMimeType": "application/json"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "temperature": 0.2,
+                        "responseMimeType": "application/json"
+                    }
                 }
-            }
-            req_data = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(url, data=req_data, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                resp_body = resp.read().decode("utf-8")
-                resp_json = json.loads(resp_body)
-                content_text = resp_json["candidates"][0]["content"]["parts"][0]["text"]
-                gemini_data = extract_json(content_text)
-        except Exception as ge:
-            print(f"[AI Engine] Gemini API call notice: {ge}")
+                req_data = json.dumps(payload).encode("utf-8")
+                req = urllib.request.Request(url, data=req_data, headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    resp_body = resp.read().decode("utf-8")
+                    resp_json = json.loads(resp_body)
+                    candidates = resp_json.get("candidates", [])
+                    if candidates:
+                        content_text = candidates[0]["content"]["parts"][0]["text"]
+                        parsed = extract_json(content_text)
+                        if parsed and isinstance(parsed, dict) and "summary" in parsed:
+                            gemini_data = parsed
+                            gemini_data["ai_model"] = model_name
+                            gemini_data["is_live_gemini"] = True
+                            print(f"[AI Engine] Successfully generated live analysis with Gemini ({model_name})!")
+                            break
+            except urllib.error.HTTPError as he:
+                err_detail = ""
+                try:
+                    err_detail = he.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    pass
+                print(f"[AI Engine] Gemini API error with '{model_name}' (HTTP {he.code}): {err_detail[:250]}")
+            except Exception as ge:
+                print(f"[AI Engine] Gemini API notice with '{model_name}': {ge}")
 
     if not gemini_data or not isinstance(gemini_data, dict):
         # Dynamic data-driven Gemini fallback synthesis (works for ANY niche)
@@ -634,6 +651,8 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ ĐẲNG CẤP CHIẾN LƯỢC DTC 
                 f"[14-20s High Converting CTA] 'Link sản phẩm mình ghim ở giỏ hàng/bio, đang có deal giảm giá cho người xem TikTok!'"
             )
         }
+        gemini_data["ai_model"] = "local_synthesis"
+        gemini_data["is_live_gemini"] = False
 
     # Embed Audio Intelligence & Voice of Customer dataset
     top_audio_type = audio_summary["distribution"][0]["label"] if audio_summary.get("distribution") else "🎙️ Voiceover (Giọng Thuyết Minh)"

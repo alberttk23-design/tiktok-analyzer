@@ -122,6 +122,8 @@ interface CommentInsight {
 interface MasterAnalysis {
   keyword: string;
   engine?: string;
+  is_live_gemini?: boolean;
+  ai_model?: string;
   summary: string;
   viral_triggers: string[];
   friction_solutions: string[];
@@ -1707,9 +1709,29 @@ ${data.master_analysis.summary}\n`;
               <div className="space-y-5">
                 {/* Executive Summary */}
                 <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl">
-                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-2">
-                    <Target size={16} />
-                    <span>Bức Tranh Toàn Cảnh & Đánh Giá Ngách Thị Trường</span>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                      <Target size={16} />
+                      <span>Bức Tranh Toàn Cảnh & Đánh Giá Ngách Thị Trường</span>
+                    </div>
+                    {selectedEngine === "gemini" && (
+                      masterAI.is_live_gemini ? (
+                        <span className="bg-gradient-to-r from-violet-500/20 to-pink-500/20 text-pink-300 border border-pink-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+                          <Sparkles size={12} className="text-pink-400" />
+                          <span>Google Gemini Trực Tiếp ({masterAI.ai_model || "Flash"})</span>
+                        </span>
+                      ) : (
+                        <span className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
+                          <span>Bản Tổng Hợp Cục Bộ (Fallback)</span>
+                        </span>
+                      )
+                    )}
+                    {selectedEngine === "ollama" && (
+                      <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
+                        <Cpu size={12} className="text-emerald-400" />
+                        <span>Mô Hình Ollama Local</span>
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm md:text-base text-slate-200 leading-relaxed font-medium">
                     {masterAI.summary}
