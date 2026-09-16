@@ -108,24 +108,28 @@ def build_fallback_review(video, keyword, comment_insight=None):
         base_psych = "Emotional connection to cozy living, relieving maintenance anxiety (no watering, no dying plants)."
         win_formula = "Natural lifestyle framing -> problem resolution -> seamless product showcase."
 
-    # Integrate real Voice-of-Customer from comments
+    # Integrate real Voice-of-Customer from comments into Viral Mechanics
     comment_details = ""
+    top_topics_str = ""
     if comment_insight and comment_insight.get("total_crawled", 0) > 0:
-        intent_samples = [c["text"] for c in comment_insight.get("buying_intent", [])[:3]]
+        intent_samples = [c["text"] for c in comment_insight.get("buying_intent", [])[:2]]
         obj_samples = [c["text"] for c in comment_insight.get("objections", [])[:2]]
-        
+        topics_list = [f"{t['topic']} ({t['percentage']}%)" for t in comment_insight.get("top_topics", [])[:2]]
+
         parts = []
+        if topics_list:
+            top_topics_str = f" • 🔥 Tâm điểm cmt: {', '.join(topics_list)}"
         if intent_samples:
-            parts.append(f"Ý định mua trong comment: '{', '.join(intent_samples)}'")
+            parts.append(f"🛒 Muốn mua/xin link: '{', '.join(intent_samples)}'")
         if obj_samples:
-            parts.append(f"Rào cản/lo lắng: '{', '.join(obj_samples)}'")
+            parts.append(f"⚠️ Rào cản/băn khoăn: '{', '.join(obj_samples)}'")
         if parts:
             comment_details = " | " + " & ".join(parts)
             base_psych += f" (Khán giả phản hồi thực tế: {comment_insight.get('summary', '')})"
 
     ad_angle = classify_ad_angle(caption=caption, comments_text=comment_details)
     hook_desc = f"{hook_type}: Opening with '{caption[:75]}...' to capture viewer attention within 3 seconds."
-    viral_desc = f"Driven by {views:,} views and {saves:,} saves ({comments:,} comments) due to high shareability and home decor reference value.{comment_details}"
+    viral_desc = f"Đạt {views:,} views và {saves:,} lượt lưu ({comments:,} bình luận) nhờ giá trị tham khảo decor thực tế.{top_topics_str}{comment_details}"
 
     viral_score = min(98.0, max(50.0, float(video.get("score") or 75.0)))
     hook_score = round(min(98.0, viral_score * 1.05), 1)
@@ -372,51 +376,63 @@ if __name__ == "__main__":
 def generate_master_holistic_analysis(keyword: str):
     """
     100% Local Master AI Analysis via Ollama (qwen3-vl:4b).
-    Synthesizes the macro picture across all 20 videos, metrics, and real comments.
+    Synthesizes the macro picture across all videos, metrics, and up to 1,000 real comments.
     """
     print(f"[AI Engine] Running 100% Local Master Analysis for '{keyword}'...")
     res = db.get_results_by_keyword(keyword)
     videos = res.get("videos", [])
     reviews = res.get("reviews", [])
-    insights = res.get("comment_insights", {})
 
     if not videos:
         return None
 
-    # Aggregate key signals
+    # Aggregate 1,000 real comments across this keyword for empirical Voice-of-Customer
+    conn = db.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT * FROM video_comments 
+    WHERE video_id IN (SELECT video_id FROM videos WHERE keyword = ?)
+    ORDER BY digg_count DESC LIMIT 1000
+    """, (keyword,))
+    raw_comments = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    from backend.comment_crawler import extract_comment_insights
+    voc = extract_comment_insights(raw_comments, keyword)
+    top_topics = voc.get("top_topics", [])
+    buying_desires = voc.get("buying_intent", [])[:8]
+    top_objections = voc.get("objections", [])[:8]
+    voc_summary = voc.get("summary", "")
+
+    # Aggregate key metrics
     total_views = sum(v.get("views", 0) for v in videos)
     top_video = max(videos, key=lambda x: x.get("views", 0))
 
     sample_hooks = [r.get("hook", "")[:80] for r in reviews[:4]]
-    sample_objections = []
-    sample_questions = []
-
-    for vid, ins in list(insights.items())[:5]:
-        for o in ins.get("objections", [])[:2]:
-            sample_objections.append(o.get("text", ""))
-        for q in ins.get("buying_intent", [])[:2]:
-            sample_questions.append(q.get("text", ""))
+    topics_str = ", ".join([f"{t['topic']} ({t['percentage']}%)" for t in top_topics[:4]]) if top_topics else "Độ chân thực, giá bán, chậu và phụ kiện"
+    desires_str = "; ".join([f"'{c['text']}'" for c in buying_desires[:4]]) or "Xin link mua, hỏi giá, hỏi kích cỡ và chỗ mua chậu"
+    objections_str = "; ".join([f"'{c['text']}'" for c in top_objections[:4]]) or "Sợ lá bóng nhựa giả, giá cao, không biết chọn chậu phù hợp"
 
     prompt = f"""
 Bạn là chuyên gia trưởng chiến lược sáng tạo TikTok DTC hàng đầu.
-Hãy phân tích tổng thể toàn bộ ngách sản phẩm "{keyword}" dựa trên dữ liệu cào thực tế:
-- Tổng video phân tích: {len(videos)} video ({total_views:,} lượt xem tích lũy)
+Hãy phân tích tổng thể toàn bộ ngách sản phẩm "{keyword}" dựa trên dữ liệu cào thực tế từ {len(videos)} video ({total_views:,} views) và {len(raw_comments):,} bình luận người dùng thực tế:
 - Video đột biến lớn nhất: {top_video.get('views', 0):,} views bởi @{top_video.get('creator')}
 - Các dạng hook phổ biến: {'; '.join(sample_hooks)}
-- Các câu hỏi xin link/mua hàng trong comment: {'; '.join(sample_questions[:4]) or 'Xin link, hỏi giá, hỏi chậu'}
-- Các phản đối/nghi ngại lớn nhất trong comment: {'; '.join(sample_objections[:4]) or 'Sợ lá nhìn giả, bóng như nhựa, kích thước nhỏ'}
+- Các chủ đề được comment bàn tán nhiều nhất: {topics_str}
+- Khán giả hỏi mua / xin link nhiều nhất: {desires_str}
+- Khán giả lo ngại / phản đối lớn nhất: {objections_str}
 
-Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần:
+Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần (gắn kết chặt chẽ tiếng nói khách hàng từ comment):
 {{
-  "summary": "Đánh giá bức tranh toàn cảnh ngách này: mức độ cạnh tranh, độ nóng thị trường và cơ hội cho brand mới.",
+  "summary": "Đánh giá bức tranh toàn cảnh ngách này: quy mô thị trường, tâm lý người mua thể hiện qua comment, và cơ hội bứt phá doanh số cho brand.",
   "viral_triggers": [
-    "Yếu tố viral sống còn 1 (ví dụ: Cận cảnh vân lá matte không bóng loáng)",
-    "Yếu tố viral sống còn 2 (ví dụ: Biến đổi không gian trước/sau góc phòng)",
-    "Yếu tố viral sống còn 3 (ví dụ: Combo kèm chậu xi măng/terracotta)"
+    "Yếu tố viral sống còn 1 (dựa trên mối quan tâm hàng đầu của khách trong comment)",
+    "Yếu tố viral sống còn 2",
+    "Yếu tố viral sống còn 3"
   ],
   "friction_solutions": [
-    "Giải pháp triệt tiêu rào cản 1 (Cách giải quyết nỗi sợ lá nhựa giả ngay 3s đầu)",
-    "Giải pháp triệt tiêu rào cản 2 (Cách hướng dẫn đặt chậu và phụ kiện kèm link)"
+    "Giải pháp triệt tiêu rào cản 1 (Hóa giải trực tiếp lo ngại hàng đầu trong comment)",
+    "Giải pháp triệt tiêu rào cản 2"
   ],
   "winning_blueprint": "Kịch bản mẫu hoàn chỉnh (Hook 0-3s -> Phá vỡ rào cản 3-8s -> Chứng minh chất lượng 8-15s -> Kêu gọi hành động 15-20s)"
 }}
@@ -425,23 +441,34 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần:
     data = extract_json(llm_resp)
 
     if not data or not isinstance(data, dict):
-        # High quality fallback synthesis
+        # High quality empirical fallback synthesis
         data = {
-            "summary": f"Ngách '{keyword}' có dung lượng thị trường rất lớn với hơn {total_views:,} views từ 20 video hàng đầu. Khán giả có nhu cầu decor thẩm mỹ cực cao nhưng rào cản lớn nhất là sợ mua phải cây lá bóng nhựa rẻ tiền online. Brand nào giải quyết được nỗi sợ này sẽ dễ dàng chiếm lĩnh doanh số.",
+            "summary": (
+                f"Ngách '{keyword}' sở hữu dung lượng thị trường mạnh với hơn {total_views:,} views tích lũy từ {len(videos)} video hàng đầu. "
+                f"Dựa trên {len(raw_comments):,} bình luận thực tế, mối quan tâm lớn nhất của khách hàng tập trung vào [{topics_str}]. "
+                f"Khán giả có tỷ lệ hỏi mua/xin link rất cao ({desires_str[:90]}...), nhưng trở ngại lớn nhất là tâm lý e ngại chất liệu giả và giá thành. "
+                f"Thương hiệu biết cách bẻ gãy rào cản này ngay trong 3 giây đầu sẽ tối đa hóa tỷ lệ chuyển đổi."
+            ),
             "viral_triggers": [
-                "Hook tương phản: 'Đừng mua cây thật nếu không muốn tốn công dọn lá chết'",
-                "Chứng minh cận cảnh (Macro zoom): Chạm tay vuốt gân lá dưới ánh sáng tự nhiên để chứng minh độ matte",
-                "Combo giải pháp: Quay cây đi kèm chậu gốm/giỏ mây hoàn chỉnh thay vì để chậu nhựa đen mặc định"
+                f"Cận cảnh chi tiết lá & cành ({top_topics[0]['topic'] if top_topics else 'Độ chân thực'}): Quay macro dưới ánh nắng cửa sổ chứng minh độ sần matte, triệt tiêu cảm giác bóng nhựa.",
+                "Giải pháp trọn gói (All-in-one bundle): Không chỉ bán cây trần mà hướng dẫn kèm chậu mây/gốm + rêu phủ gốc để tạo thành phẩm hoàn chỉnh.",
+                "Tương phản chi phí & công sức: So sánh việc sở hữu cây nhân tạo bền đẹp 5 năm với việc cây thật bị úa lá, tưới tiêu phức tạp."
             ],
             "friction_solutions": [
-                "Bẻ gãy rào cản 'Lá bóng như nhựa giả': Đưa sát camera vào mép lá ngay giây thứ 2 và thử nghiệm dưới ánh nắng cửa sổ",
-                "Bẻ gãy băn khoăn 'Mua chậu ở đâu': Bán theo combo hoặc ghim link kèm chậu trực tiếp trong giỏ hàng TikTok Shop"
+                f"Hóa giải nghi vấn chất lượng ('{top_objections[0]['text'] if top_objections else 'Sợ lá nhìn giả'}'): Cho người xem thấy độ dẻo của cành và zoom 4K vào cuống lá ở giây 2.",
+                f"Giải quyết nhu cầu mua sắm tức thì ('{buying_desires[0]['text'] if buying_desires else 'Hỏi link mua'}'): Ghim sản phẩm rõ ràng kèm hướng dẫn chọn size (6ft/7ft/8ft) theo độ cao trần nhà."
             ],
-            "winning_blueprint": "[0-3s Hook] 'Ai cũng nghĩ cây ô liu này là đồ thật cho đến khi chạm vào...' [3-8s Body] Cận cảnh sờ từng gân lá không bóng chói, kéo nhẹ cành chứng minh độ dẻo dai. [8-15s Solution] Bật mí bí quyết uốn cành và đặt vào chậu mây có rải rêu khô che đế. [15-20s CTA] 'Mua ngay đợt flash sale đang giảm 30% ở link góc trái!'"
+            "winning_blueprint": "[0-3s Hook] 'Nếu bạn đang tính bỏ $100+ mua cây ô liu giả thì xem hết 10 giây này trước đã...' [3-8s Objection Killer] Chạm tay vào lá, test độ lóa sáng trực tiếp trước cửa sổ để chứng minh không hề bóng nhựa. [8-15s Styling Trick] Chia sẻ mẹo uốn cành hình chữ S và bỏ vào chậu gốm rải sỏi/rêu. [15-20s Direct CTA] 'Đang có deal ưu đãi kèm link trong bio cho 50 người đầu tiên!'"
         }
 
+    # Embed the rich Voice of Customer dataset
+    data["customer_interests"] = top_topics
+    data["buying_desires"] = buying_desires
+    data["top_objections"] = top_objections
+    data["voc_summary"] = voc_summary
+
     db.save_master_analysis(keyword, data)
-    print(f"[AI Engine] Master analysis saved for '{keyword}'.")
+    print(f"[AI Engine] Master analysis saved for '{keyword}' with {len(raw_comments)} comments analyzed.")
     return data
 
 

@@ -193,6 +193,32 @@ def extract_comment_insights(comments: List[Dict[str, Any]], keyword: str) -> Di
                 "likes": diggs
             })
 
+    # Topic category matching to identify what users comment about most
+    topic_definitions = {
+        "Chậu & phụ kiện lót gốc (Planter / Pot / Moss)": ["planter", "pot", "basket", "moss", "dirt", "rocks", "base", "chậu", "giỏ", "rêu", "lót"],
+        "Độ chân thực của lá & thân cây (Realism / Leaves)": ["real", "fake", "plastic", "leaves", "trunk", "bark", "branch", "thật", "giả", "lá", "cành", "thân", "bóng"],
+        "Chiều cao & kích cỡ góc phòng (Height / Size)": ["tall", "height", "size", "feet", "ft", "inch", "corner", "room", "ceiling", "cao", "kích thước", "góc"],
+        "Giá bán & xin link mua hàng (Price / Deal / Link)": ["link", "where", "buy", "price", "cost", "amazon", "target", "how much", "store", "mua ở đâu", "giá", "xin link"],
+        "Cách uốn cành & bung tán (Styling / Fluffing)": ["bend", "fluff", "shape", "style", "unboxing", "uốn", "xòe", "tán"]
+    }
+
+    topic_counts = {t: 0 for t in topic_definitions}
+    for c in comments:
+        lower = c.get("text", "").lower()
+        for topic, kws in topic_definitions.items():
+            if any(k in lower for k in kws):
+                topic_counts[topic] += 1
+
+    # Filter and sort top topics
+    total_cmt = len(comments)
+    sorted_topics = sorted(
+        [{"topic": t, "count": cnt, "percentage": round((cnt / total_cmt) * 100, 1) if total_cmt else 0}
+         for t, cnt in topic_counts.items() if cnt > 0],
+        key=lambda x: x["count"],
+        reverse=True
+    )
+    top_topics_list = [f"{t['topic']} ({t['percentage']}%)" for t in sorted_topics[:3]]
+
     # Sort by engagement (likes)
     buying_intent = sorted(buying_intent, key=lambda x: x["likes"], reverse=True)[:15]
     objections = sorted(objections, key=lambda x: x["likes"], reverse=True)[:15]
@@ -203,14 +229,20 @@ def extract_comment_insights(comments: List[Dict[str, Any]], keyword: str) -> Di
     intent_ratio = round((len(buying_intent) / len(comments)) * 100, 1) if comments else 0
     obj_ratio = round((len(objections) / len(comments)) * 100, 1) if comments else 0
 
+    topics_summary_str = ", ".join(top_topics_list) if top_topics_list else "hỏi về sản phẩm và mẫu mã"
+    most_wanted = buying_intent[0]["text"] if buying_intent else "xin link mua và hỏi giá"
+    biggest_doubt = objections[0]["text"] if objections else "chất lượng thực tế khi nhận hàng"
+
     summary = (
         f"Phân tích từ {len(comments):,} bình luận thực tế: "
-        f"{intent_ratio}% người xem có ý định mua (hỏi link, hỏi chậu, hỏi giá). "
-        f"{obj_ratio}% có thắc mắc/nghi ngại về độ chân thực hoặc kích thước."
+        f"Khán giả quan tâm nhiều nhất đến [{topics_summary_str}]. "
+        f"Hỏi mua / xin link nhiều nhất: '{most_wanted}'. "
+        f"Rào cản / nghi ngại lớn nhất: '{biggest_doubt}'."
     )
 
     return {
         "total_crawled": len(comments),
+        "top_topics": sorted_topics,
         "buying_intent": buying_intent,
         "objections": objections,
         "top_faqs": faqs,

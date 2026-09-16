@@ -40,6 +40,12 @@ class CrawlCommentsRequest(BaseModel):
     max_comments: int = 1000
 
 
+class CrawlTopCommentsRequest(BaseModel):
+    keyword: str
+    top_n: int = 5
+    max_comments_per_video: int = 200
+
+
 class MultimodalBatchRequest(BaseModel):
     keyword: str
     top_n: int = 5
@@ -148,6 +154,54 @@ def get_history():
     return {
         "total_crawled_videos": len(video_ids),
         "total_urls": len(urls)
+    }
+
+
+@app.post("/api/crawl-top-comments")
+def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: BackgroundTasks):
+    """
+    Batch crawl up to 1000 comments across top N videos for a keyword,
+    extract Voice-of-Customer topic clusters, and update the Master Holistic Analysis.
+    """
+    keyword = req.keyword.strip()
+    if not keyword:
+        raise HTTPException(status_code=400, detail="Keyword is required")
+
+    def run_batch_crawl():
+        conn = db.get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+        SELECT video_id, creator, comments FROM videos 
+        WHERE keyword = ? ORDER BY comments DESC LIMIT ?
+        """, (keyword, req.top_n))
+        top_vids = [dict(r) for r in cursor.fetchall()]
+        conn.close()
+
+        total_new_crawled = 0
+        for v in top_vids:
+            vid = v["video_id"]
+            author = v.get("creator")
+            cmts = comment_crawler.fetch_comments_for_video(
+                video_id=vid,
+                max_comments=req.max_comments_per_video,
+                author_username=author
+            )
+            if cmts:
+                db.save_comments(vid, cmts)
+                ins = comment_crawler.extract_comment_insights(cmts, keyword)
+                db.save_comment_insights(vid, keyword, ins)
+                total_new_crawled += len(cmts)
+
+        # Regenerate master holistic analysis with the updated comments
+        ai_engine.generate_master_holistic_analysis(keyword)
+        print(f"[API] Batch comments crawl complete for '{keyword}': {total_new_crawled} comments crawled.")
+
+    background_tasks.add_task(run_batch_crawl)
+
+    return {
+        "status": "started",
+        "keyword": keyword,
+        "message": f"Started crawling comments for top {req.top_n} videos (target: up to {req.top_n * req.max_comments_per_video} comments)..."
     }
 
 

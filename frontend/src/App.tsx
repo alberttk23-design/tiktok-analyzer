@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import {
   Sparkles,
   Search,
@@ -33,6 +33,11 @@ import {
   Camera,
   Film,
   SlidersHorizontal,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Filter,
+  ShoppingCart,
 } from "lucide-react";
 
 interface VideoItem {
@@ -50,6 +55,7 @@ interface VideoItem {
   saves: number;
   engagement_rate: number;
   score: number;
+  creator_followers?: number;
 }
 
 interface ReviewItem {
@@ -82,6 +88,7 @@ interface CommentInsight {
   objections: { username: string; text: string; likes: number }[];
   top_faqs: { username: string; text: string; likes: number }[];
   social_proof: { username: string; text: string; likes: number }[];
+  top_topics?: { topic: string; count: number; percentage: number }[];
   summary: string;
 }
 
@@ -91,6 +98,10 @@ interface MasterAnalysis {
   viral_triggers: string[];
   friction_solutions: string[];
   winning_blueprint: string;
+  customer_interests?: { topic: string; count: number; percentage: number }[];
+  buying_desires?: { username: string; text: string; likes: number }[];
+  top_objections?: { username: string; text: string; likes: number }[];
+  voc_summary?: string;
 }
 
 interface ConceptItem {
@@ -173,6 +184,13 @@ function App() {
   const [analyzingMultimodalVid, setAnalyzingMultimodalVid] = useState<string | null>(null);
   const [analyzingTopMultimodal, setAnalyzingTopMultimodal] = useState(false);
   const [selectedAngleFilter, setSelectedAngleFilter] = useState<string>("all");
+
+  // Sorting & Filtering states (Score, Views, Tym/Likes, Lưu/Saves, Comments, Engagement)
+  const [sortBy, setSortBy] = useState<"score" | "views" | "likes" | "saves" | "comments" | "engagement">("score");
+  const [sortOrder, setSortOrder] = useState<"desc" | "asc">("desc");
+  const [tableSearch, setTableSearch] = useState<string>("");
+  const [minViewsFilter, setMinViewsFilter] = useState<number>(0);
+  const [batchCrawlingComments, setBatchCrawlingComments] = useState<boolean>(false);
 
   const pollingRef = useRef<any>(null);
 
@@ -344,6 +362,43 @@ function App() {
     }
   }
 
+  // Batch crawl 1000 comments across top videos for Master Report
+  async function handleBatchCrawlComments() {
+    if (batchCrawlingComments || !keyword.trim()) return;
+    setBatchCrawlingComments(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/crawl-top-comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: keyword.trim(),
+          top_n: 10,
+          max_comments_per_video: 100,
+        }),
+      });
+      if (res.ok) {
+        setTimeout(async () => {
+          await loadData();
+          setBatchCrawlingComments(false);
+        }, 3500);
+      } else {
+        setBatchCrawlingComments(false);
+      }
+    } catch (e) {
+      console.error("Batch crawl comments failed:", e);
+      setBatchCrawlingComments(false);
+    }
+  }
+
+  function handleToggleSort(column: "score" | "views" | "likes" | "saves" | "comments" | "engagement") {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === "desc" ? "asc" : "desc");
+    } else {
+      setSortBy(column);
+      setSortOrder("desc");
+    }
+  }
+
   // Copy Master Prompt for external AI including comments
   function handleCopyPrompt() {
     if (!data || !data.videos) return;
@@ -501,6 +556,51 @@ ${data.master_analysis.summary}\n`;
 
   const insightsMap = data?.comment_insights || {};
   const masterAI = data?.master_analysis;
+
+  const sortedFilteredVideos = useMemo(() => {
+    if (!data?.videos) return [];
+    let list = [...data.videos];
+
+    if (tableSearch.trim()) {
+      const q = tableSearch.toLowerCase();
+      list = list.filter(
+        (v) =>
+          (v.creator && v.creator.toLowerCase().includes(q)) ||
+          (v.caption && v.caption.toLowerCase().includes(q))
+      );
+    }
+
+    if (minViewsFilter > 0) {
+      list = list.filter((v) => (v.views || 0) >= minViewsFilter);
+    }
+
+    list.sort((a, b) => {
+      let valA = 0;
+      let valB = 0;
+      if (sortBy === "score") {
+        valA = a.score ?? 0;
+        valB = b.score ?? 0;
+      } else if (sortBy === "views") {
+        valA = a.views ?? 0;
+        valB = b.views ?? 0;
+      } else if (sortBy === "likes") {
+        valA = a.likes ?? 0;
+        valB = b.likes ?? 0;
+      } else if (sortBy === "saves") {
+        valA = a.saves ?? 0;
+        valB = b.saves ?? 0;
+      } else if (sortBy === "comments") {
+        valA = a.comments ?? 0;
+        valB = b.comments ?? 0;
+      } else if (sortBy === "engagement") {
+        valA = a.engagement_rate ?? 0;
+        valB = b.engagement_rate ?? 0;
+      }
+      return sortOrder === "desc" ? valB - valA : valA - valB;
+    });
+
+    return list;
+  }, [data?.videos, sortBy, sortOrder, tableSearch, minViewsFilter]);
 
   return (
     <div className="min-h-screen bg-[#0b0d13] text-slate-100 p-5 md:p-8 font-sans">
@@ -877,6 +977,120 @@ ${data.master_analysis.summary}\n`;
                   </p>
                 </div>
 
+                {/* Voice of Customer (Tiếng Nói Khách Hàng Từ 1,000+ Bình Luận) */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-5">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                        <MessageSquare size={16} />
+                        <span>Tiếng Nói Khách Hàng (Voice of Customer) &bull; Phân Tích 1,000+ Bình Luận</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Thống kê chủ đề bàn luận nhiều nhất &amp; trích xuất nhu cầu mua sắm thực tế từ comment TikTok.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleBatchCrawlComments}
+                      disabled={batchCrawlingComments}
+                      className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer self-start md:self-auto disabled:opacity-50"
+                    >
+                      {batchCrawlingComments ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Đang cào 1,000 cmt...</span>
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw size={14} />
+                          <span>🔄 Cào &amp; Cập Nhật 1,000 Bình Luận</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* VOC Summary Quote */}
+                  {masterAI.voc_summary && (
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-violet-900/40 text-xs md:text-sm text-violet-200 leading-relaxed font-medium">
+                      💡 <strong>Đúc kết từ bình luận:</strong> {masterAI.voc_summary}
+                    </div>
+                  )}
+
+                  {/* Topic Clusters Distribution */}
+                  {masterAI.customer_interests && masterAI.customer_interests.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">
+                        📊 Mức Độ Quan Tâm Theo Chủ Đề (Top Comment Themes)
+                      </h4>
+                      <div className="grid gap-2.5">
+                        {masterAI.customer_interests.map((t, idx) => (
+                          <div key={idx} className="bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                            <div className="flex items-center justify-between text-xs mb-1.5">
+                              <span className="font-semibold text-slate-200">{t.topic}</span>
+                              <span className="font-mono text-purple-400 font-bold">{t.percentage}% ({t.count} cmt)</span>
+                            </div>
+                            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-purple-500 to-pink-500 h-2 rounded-full transition-all"
+                                style={{ width: `${Math.min(100, Math.max(5, t.percentage * 2))}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Two Columns: Buying Desires vs Top Objections */}
+                  <div className="grid md:grid-cols-2 gap-4 pt-2">
+                    {/* Buying Desires */}
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                      <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
+                        <ShoppingCart size={15} />
+                        <span>Khán Giả Muốn Mua Gì Nhiều Nhất (Buying Desires &amp; Links)</span>
+                      </div>
+                      <div className="space-y-2">
+                        {masterAI.buying_desires && masterAI.buying_desires.length > 0 ? (
+                          masterAI.buying_desires.slice(0, 5).map((b, idx) => (
+                            <div key={idx} className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                                <span className="font-semibold text-emerald-400">@{b.username || "khách hàng"}</span>
+                                {b.likes > 0 && <span className="text-pink-400">❤️ {b.likes} tym</span>}
+                              </div>
+                              <p className="italic text-slate-200">"{b.text}"</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">Chưa có câu hỏi mua hàng trích xuất.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Top Objections */}
+                    <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80">
+                      <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-3">
+                        <ShieldAlert size={15} />
+                        <span>Rào Cản &amp; Nghi Ngại Lớn Nhất (Objections / Doubts)</span>
+                      </div>
+                      <div className="space-y-2">
+                        {masterAI.top_objections && masterAI.top_objections.length > 0 ? (
+                          masterAI.top_objections.slice(0, 5).map((o, idx) => (
+                            <div key={idx} className="bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-xs text-slate-300">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+                                <span className="font-semibold text-amber-400">@{o.username || "khách hàng"}</span>
+                                {o.likes > 0 && <span className="text-pink-400">❤️ {o.likes} tym</span>}
+                              </div>
+                              <p className="italic text-slate-200">"{o.text}"</p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-slate-500 italic">Chưa có rào cản phản đối trích xuất.</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-5">
                   {/* Non-Negotiable Viral Triggers */}
                   <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6">
@@ -991,6 +1205,49 @@ ${data.master_analysis.summary}\n`;
               ))}
             </div>
 
+            {/* Sorting & Filter Controls Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-400 font-semibold flex items-center gap-1">
+                  <ArrowUpDown size={13} className="text-purple-400" /> Sắp xếp:
+                </span>
+                {[
+                  { id: "score", label: "🏆 Điểm Score" },
+                  { id: "views", label: "👁️ Views" },
+                  { id: "likes", label: "❤️ Tym" },
+                  { id: "saves", label: "📌 Lưu" },
+                  { id: "comments", label: "💬 Cmt" },
+                  { id: "engagement", label: "⚡ Tương tác" },
+                ].map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleToggleSort(s.id as any)}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer flex items-center gap-1 font-medium ${
+                      sortBy === s.id
+                        ? "bg-purple-600 text-white shadow font-bold"
+                        : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
+                    }`}
+                  >
+                    <span>{s.label}</span>
+                    {sortBy === s.id && (sortOrder === "desc" ? <ArrowDown size={11} /> : <ArrowUp size={11} />)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Lọc creator / caption..."
+                    value={tableSearch}
+                    onChange={(e) => setTableSearch(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl pl-7 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 w-44"
+                  />
+                </div>
+              </div>
+            </div>
+
             {(!data?.videos || data.videos.length === 0) ? (
               <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
                 <Brain size={40} className="mx-auto mb-3 text-slate-600" />
@@ -999,7 +1256,7 @@ ${data.master_analysis.summary}\n`;
               </div>
             ) : (
               <div className="grid gap-4">
-                {data.videos
+                {sortedFilteredVideos
                   .filter((vid) => {
                     if (selectedAngleFilter === "all") return true;
                     const r = reviewMap.get(vid.video_id);
@@ -1026,6 +1283,11 @@ ${data.master_analysis.summary}\n`;
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-semibold text-white">@{vid.creator || "unknown"}</span>
+                              {vid.creator_followers && vid.creator_followers > 0 ? (
+                                <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded-full border border-purple-800/60 font-mono">
+                                  {vid.creator_followers.toLocaleString()} flw
+                                </span>
+                              ) : null}
                               <a
                                 href={vid.url}
                                 target="_blank"
@@ -1568,70 +1830,186 @@ ${data.master_analysis.summary}\n`;
 
         {/* TAB 5: DATABASE RAW TABLE WITH AI OVERALL COLUMN */}
         {activeTab === "database" && (
-          <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl overflow-x-auto">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
               <div>
                 <h3 className="text-base md:text-lg font-bold text-white flex items-center gap-2">
                   <Database size={18} className="text-purple-400" />
-                  Bảng Dữ Liệu Chi Tiết Kèm Cột AI Phân Tích Tổng Thể ({data?.videos?.length || 0} Videos)
+                  Bảng Dữ Liệu Chi Tiết ({sortedFilteredVideos.length} / {data?.videos?.length || 0} Videos)
                 </h3>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Cột <strong>AI Phân Tích Tổng Thể</strong> tích hợp sẵn trong file CSV khi tải về.
+                  Nhấp vào tiêu đề cột để sắp xếp &bull; Tích hợp cột AI Phân Tích Tổng Thể &bull; Hỗ trợ xuất CSV.
                 </p>
               </div>
-              <span className="text-xs text-slate-400">File: data/tiktok.db</span>
+              <span className="text-xs text-slate-400 font-mono bg-slate-950 px-3 py-1 rounded-xl border border-slate-800">
+                SQLite: data/tiktok.db
+              </span>
             </div>
 
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400">
-                  <th className="py-3 px-3">#</th>
-                  <th className="py-3 px-3">Creator</th>
-                  <th className="py-3 px-3">Views</th>
-                  <th className="py-3 px-3">Tym</th>
-                  <th className="py-3 px-3">Lưu</th>
-                  <th className="py-3 px-3">Bình Luận</th>
-                  <th className="py-3 px-3">Score</th>
-                  <th className="py-3 px-3 min-w-[280px]">AI Phân Tích Tổng Thể (Local)</th>
-                  <th className="py-3 px-3">Link</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60 text-slate-300">
-                {data?.videos?.map((v, i) => {
-                  const rev = reviewMap.get(v.video_id);
-                  return (
-                    <tr key={v.video_id || i} className="hover:bg-slate-800/40 transition">
-                      <td className="py-3 px-3 font-mono text-purple-400">{i + 1}</td>
-                      <td className="py-3 px-3 font-semibold text-white">@{v.creator || "unknown"}</td>
-                      <td className="py-3 px-3 font-mono">{(v.views || 0).toLocaleString()}</td>
-                      <td className="py-3 px-3 font-mono">{(v.likes || 0).toLocaleString()}</td>
-                      <td className="py-3 px-3 font-mono">{(v.saves || 0).toLocaleString()}</td>
-                      <td className="py-3 px-3 font-mono">{(v.comments || 0).toLocaleString()}</td>
-                      <td className="py-3 px-3 font-bold text-emerald-400">{v.score}</td>
-                      <td className="py-3 px-3 text-slate-300">
-                        <div className="bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px] leading-relaxed line-clamp-2">
-                          {rev?.winning_formula ? (
-                            <span>{rev.winning_formula}</span>
-                          ) : (
-                            <span className="text-slate-500 italic">Đang cập nhật phân tích</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <a
-                          href={v.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-pink-400 hover:underline flex items-center gap-1"
-                        >
-                          TikTok <ExternalLink size={12} />
-                        </a>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            {/* Filter Toolbar for Database */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-slate-400 font-semibold flex items-center gap-1">
+                  <Filter size={13} className="text-violet-400" /> Lọc nhanh Views:
+                </span>
+                {[
+                  { label: "Tất cả", val: 0 },
+                  { label: ">50K", val: 50000 },
+                  { label: ">100K", val: 100000 },
+                  { label: ">500K", val: 500000 },
+                  { label: ">1M", val: 1000000 },
+                ].map((f) => (
+                  <button
+                    key={f.val}
+                    onClick={() => setMinViewsFilter(f.val)}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-medium ${
+                      minViewsFilter === f.val
+                        ? "bg-purple-600 text-white font-bold shadow"
+                        : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    placeholder="Tìm creator / caption..."
+                    value={tableSearch}
+                    onChange={(e) => setTableSearch(e.target.value)}
+                    className="bg-slate-900 border border-slate-800 rounded-xl pl-7 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 w-52"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400">
+                    <th className="py-3 px-3">#</th>
+                    <th className="py-3 px-3">
+                      <span>Creator</span>
+                    </th>
+                    <th
+                      onClick={() => handleToggleSort("views")}
+                      className="py-3 px-3 cursor-pointer hover:text-white transition select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Views</span>
+                        {sortBy === "views" ? (
+                          sortOrder === "desc" ? <ArrowDown size={12} className="text-purple-400" /> : <ArrowUp size={12} className="text-purple-400" />
+                        ) : (
+                          <ArrowUpDown size={11} className="text-slate-600" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleToggleSort("likes")}
+                      className="py-3 px-3 cursor-pointer hover:text-white transition select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Tym</span>
+                        {sortBy === "likes" ? (
+                          sortOrder === "desc" ? <ArrowDown size={12} className="text-purple-400" /> : <ArrowUp size={12} className="text-purple-400" />
+                        ) : (
+                          <ArrowUpDown size={11} className="text-slate-600" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleToggleSort("saves")}
+                      className="py-3 px-3 cursor-pointer hover:text-white transition select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Lưu</span>
+                        {sortBy === "saves" ? (
+                          sortOrder === "desc" ? <ArrowDown size={12} className="text-purple-400" /> : <ArrowUp size={12} className="text-purple-400" />
+                        ) : (
+                          <ArrowUpDown size={11} className="text-slate-600" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleToggleSort("comments")}
+                      className="py-3 px-3 cursor-pointer hover:text-white transition select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Bình Luận</span>
+                        {sortBy === "comments" ? (
+                          sortOrder === "desc" ? <ArrowDown size={12} className="text-purple-400" /> : <ArrowUp size={12} className="text-purple-400" />
+                        ) : (
+                          <ArrowUpDown size={11} className="text-slate-600" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      onClick={() => handleToggleSort("score")}
+                      className="py-3 px-3 cursor-pointer hover:text-white transition select-none"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Score</span>
+                        {sortBy === "score" ? (
+                          sortOrder === "desc" ? <ArrowDown size={12} className="text-purple-400" /> : <ArrowUp size={12} className="text-purple-400" />
+                        ) : (
+                          <ArrowUpDown size={11} className="text-slate-600" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-3 min-w-[280px]">AI Phân Tích Tổng Thể (Local)</th>
+                    <th className="py-3 px-3">Link</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60 text-slate-300">
+                  {sortedFilteredVideos.map((v, i) => {
+                    const rev = reviewMap.get(v.video_id);
+                    return (
+                      <tr key={v.video_id || i} className="hover:bg-slate-800/40 transition">
+                        <td className="py-3 px-3 font-mono text-purple-400">{i + 1}</td>
+                        <td className="py-3 px-3 font-semibold text-white">
+                          <div className="flex flex-col">
+                            <span>@{v.creator || "unknown"}</span>
+                            {v.creator_followers && v.creator_followers > 0 ? (
+                              <span className="text-[10px] text-purple-400 font-mono">
+                                {(v.creator_followers).toLocaleString()} flw
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 font-mono">{(v.views || 0).toLocaleString()}</td>
+                        <td className="py-3 px-3 font-mono">{(v.likes || 0).toLocaleString()}</td>
+                        <td className="py-3 px-3 font-mono">{(v.saves || 0).toLocaleString()}</td>
+                        <td className="py-3 px-3 font-mono">{(v.comments || 0).toLocaleString()}</td>
+                        <td className="py-3 px-3 font-bold text-emerald-400">{v.score}</td>
+                        <td className="py-3 px-3 text-slate-300">
+                          <div className="bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px] leading-relaxed line-clamp-2">
+                            {rev?.winning_formula ? (
+                              <span>{rev.winning_formula}</span>
+                            ) : (
+                              <span className="text-slate-500 italic">Đang cập nhật phân tích</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <a
+                            href={v.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-pink-400 hover:underline flex items-center gap-1"
+                          >
+                            TikTok <ExternalLink size={12} />
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 

@@ -163,6 +163,25 @@ def init_db():
         if col_name not in cols:
             cursor.execute(f"ALTER TABLE analysis_reviews ADD COLUMN {col_name} {col_type}")
 
+    # Migration for creator_followers in videos
+    cursor.execute("PRAGMA table_info(videos)")
+    v_cols = {row["name"] for row in cursor.fetchall()}
+    if "creator_followers" not in v_cols:
+        cursor.execute("ALTER TABLE videos ADD COLUMN creator_followers INTEGER DEFAULT 0")
+
+    # Migration for top_topics_json in comment_insights
+    cursor.execute("PRAGMA table_info(comment_insights)")
+    ci_cols = {row["name"] for row in cursor.fetchall()}
+    if "top_topics_json" not in ci_cols:
+        cursor.execute("ALTER TABLE comment_insights ADD COLUMN top_topics_json TEXT")
+
+    # Migration for Voice-of-Customer in master_analysis
+    cursor.execute("PRAGMA table_info(master_analysis)")
+    ma_cols = {row["name"] for row in cursor.fetchall()}
+    for c in ["customer_interests_json", "buying_desires_json", "top_objections_json", "voc_summary"]:
+        if c not in ma_cols:
+            cursor.execute(f"ALTER TABLE master_analysis ADD COLUMN {c} TEXT")
+
     conn.commit()
     conn.close()
 
@@ -181,15 +200,17 @@ def get_existing_video_ids():
 def save_video(video_data):
     conn = get_db()
     cursor = conn.cursor()
+    data = dict(video_data)
+    data.setdefault("creator_followers", 0)
     cursor.execute("""
     INSERT INTO videos (
         video_id, url, keyword, creator, caption, upload_date,
         duration_sec, views, likes, comments, reposts, saves,
-        engagement_rate, score
+        engagement_rate, score, creator_followers
     ) VALUES (
         :video_id, :url, :keyword, :creator, :caption, :upload_date,
         :duration_sec, :views, :likes, :comments, :reposts, :saves,
-        :engagement_rate, :score
+        :engagement_rate, :score, :creator_followers
     )
     ON CONFLICT(video_id) DO UPDATE SET
         views=excluded.views,
@@ -198,8 +219,9 @@ def save_video(video_data):
         reposts=excluded.reposts,
         saves=excluded.saves,
         engagement_rate=excluded.engagement_rate,
-        score=excluded.score
-    """, video_data)
+        score=excluded.score,
+        creator_followers=excluded.creator_followers
+    """, data)
     conn.commit()
     conn.close()
 
@@ -232,14 +254,14 @@ def save_comments(video_id: str, comments: list):
 
 
 def save_comment_insights(video_id: str, keyword: str, insights: dict):
-    """Save synthesized Voice-of-Customer insights."""
+    """Save synthesized Voice-of-Customer insights with topic clustering."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO comment_insights (
         video_id, keyword, total_crawled, buying_intent_json,
-        objections_json, top_faqs_json, social_proof_json, summary, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        objections_json, top_faqs_json, social_proof_json, top_topics_json, summary, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(video_id) DO UPDATE SET
         keyword = excluded.keyword,
         total_crawled = excluded.total_crawled,
@@ -247,6 +269,7 @@ def save_comment_insights(video_id: str, keyword: str, insights: dict):
         objections_json = excluded.objections_json,
         top_faqs_json = excluded.top_faqs_json,
         social_proof_json = excluded.social_proof_json,
+        top_topics_json = excluded.top_topics_json,
         summary = excluded.summary,
         updated_at = CURRENT_TIMESTAMP
     """, (
@@ -257,6 +280,7 @@ def save_comment_insights(video_id: str, keyword: str, insights: dict):
         json.dumps(insights.get("objections", []), ensure_ascii=False),
         json.dumps(insights.get("top_faqs", []), ensure_ascii=False),
         json.dumps(insights.get("social_proof", []), ensure_ascii=False),
+        json.dumps(insights.get("top_topics", []), ensure_ascii=False),
         insights.get("summary", "")
     ))
     conn.commit()
@@ -295,25 +319,34 @@ def get_video_comments(video_id: str, limit: int = 100):
 
 
 def save_master_analysis(keyword: str, analysis: dict):
-    """Save 100% local holistic analysis."""
+    """Save 100% local holistic analysis with deep Voice of Customer."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO master_analysis (
-        keyword, summary, viral_triggers_json, friction_solutions_json, winning_blueprint, updated_at
-    ) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        keyword, summary, viral_triggers_json, friction_solutions_json, winning_blueprint,
+        customer_interests_json, buying_desires_json, top_objections_json, voc_summary, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(keyword) DO UPDATE SET
         summary = excluded.summary,
         viral_triggers_json = excluded.viral_triggers_json,
         friction_solutions_json = excluded.friction_solutions_json,
         winning_blueprint = excluded.winning_blueprint,
+        customer_interests_json = excluded.customer_interests_json,
+        buying_desires_json = excluded.buying_desires_json,
+        top_objections_json = excluded.top_objections_json,
+        voc_summary = excluded.voc_summary,
         updated_at = CURRENT_TIMESTAMP
     """, (
         keyword,
         analysis.get("summary", ""),
         json.dumps(analysis.get("viral_triggers", []), ensure_ascii=False),
         json.dumps(analysis.get("friction_solutions", []), ensure_ascii=False),
-        analysis.get("winning_blueprint", "")
+        analysis.get("winning_blueprint", ""),
+        json.dumps(analysis.get("customer_interests", []), ensure_ascii=False),
+        json.dumps(analysis.get("buying_desires", []), ensure_ascii=False),
+        json.dumps(analysis.get("top_objections", []), ensure_ascii=False),
+        analysis.get("voc_summary", "")
     ))
     conn.commit()
     conn.close()
@@ -329,14 +362,12 @@ def get_master_analysis(keyword: str):
     if not row:
         return None
     item = dict(row)
-    try:
-        item["viral_triggers"] = json.loads(item.get("viral_triggers_json") or "[]")
-    except Exception:
-        item["viral_triggers"] = []
-    try:
-        item["friction_solutions"] = json.loads(item.get("friction_solutions_json") or "[]")
-    except Exception:
-        item["friction_solutions"] = []
+    for key in ["viral_triggers_json", "friction_solutions_json", "customer_interests_json", "buying_desires_json", "top_objections_json"]:
+        clean_key = key.replace("_json", "")
+        try:
+            item[clean_key] = json.loads(item.get(key) or "[]")
+        except Exception:
+            item[clean_key] = []
     return item
 
 
@@ -586,7 +617,7 @@ def get_results_by_keyword(keyword=None):
     insights_map = {}
     for r in cursor.fetchall():
         item = dict(r)
-        for key in ["buying_intent_json", "objections_json", "top_faqs_json", "social_proof_json"]:
+        for key in ["buying_intent_json", "objections_json", "top_faqs_json", "social_proof_json", "top_topics_json"]:
             clean_key = key.replace("_json", "")
             try:
                 item[clean_key] = json.loads(item.get(key) or "[]")
@@ -600,14 +631,12 @@ def get_results_by_keyword(keyword=None):
     master_analysis = None
     if master_row:
         master_analysis = dict(master_row)
-        try:
-            master_analysis["viral_triggers"] = json.loads(master_analysis.get("viral_triggers_json") or "[]")
-        except Exception:
-            master_analysis["viral_triggers"] = []
-        try:
-            master_analysis["friction_solutions"] = json.loads(master_analysis.get("friction_solutions_json") or "[]")
-        except Exception:
-            master_analysis["friction_solutions"] = []
+        for key in ["viral_triggers_json", "friction_solutions_json", "customer_interests_json", "buying_desires_json", "top_objections_json"]:
+            clean_key = key.replace("_json", "")
+            try:
+                master_analysis[clean_key] = json.loads(master_analysis.get(key) or "[]")
+            except Exception:
+                master_analysis[clean_key] = []
 
     conn.close()
 

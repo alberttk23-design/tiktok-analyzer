@@ -220,6 +220,8 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
 
                     author_obj = item.get("author") or {}
                     creator = author_obj.get("uniqueId") or author_obj.get("nickname") or "creator"
+                    author_stats = item.get("authorStats") or {}
+                    creator_followers = int(author_stats.get("followerCount") or author_obj.get("followerCount") or 0)
                     clean_url = f"https://www.tiktok.com/@{creator}/video/{vid}"
 
                     # Check DB history to skip duplicates instantly
@@ -250,6 +252,7 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                         "url": clean_url,
                         "keyword": keyword,  # All vectors pool under the parent niche keyword
                         "creator": creator,
+                        "creator_followers": creator_followers,
                         "caption": caption,
                         "upload_date": upload_date,
                         "duration_sec": duration,
