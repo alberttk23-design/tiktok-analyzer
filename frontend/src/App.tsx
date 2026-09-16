@@ -1595,7 +1595,7 @@ ${data.master_analysis.summary}\n`;
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Trí tuệ Google DeepMind cấp cao &bull; Đọc toàn bộ 442 video &amp; 3,800+ comment &bull; Đúc kết chiến lược DTC &amp; kịch bản triệu view sắc bén.
+                  Trí tuệ Google DeepMind cấp cao &bull; Đọc toàn bộ {data?.videos?.length || 0} video &amp; {data?.comment_stats?.total_crawled_comments?.toLocaleString() || 0} comment &bull; Đúc kết chiến lược DTC &amp; kịch bản triệu view sắc bén.
                 </p>
               </button>
 
@@ -1721,7 +1721,7 @@ ${data.master_analysis.summary}\n`;
                   const pillars = voc.pillars || {};
                   const sourcingRecs = voc.sourcing_recommendations || [];
                   const clapbackScripts = voc.clapback_scripts || [];
-                  const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 3815;
+                  const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 0;
 
                   const copyClapbackHelper = (text: string, id: string) => {
                     navigator.clipboard.writeText(text);
@@ -1778,7 +1778,7 @@ ${data.master_analysis.summary}\n`;
                             ) : (
                               <>
                                 <Zap size={13} className="text-yellow-300" />
-                                <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Cmt)</span>
+                                <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "0"} Cmt)</span>
                               </>
                             )}
                           </button>
@@ -3733,13 +3733,13 @@ ${data.master_analysis.summary}\n`;
                         Chiến Lược Âm Thanh & Lời Thoại Thắng Cuộc (Sound & Voice Intelligence)
                       </h2>
                       <p className="text-xs md:text-sm text-slate-300 mt-1 max-w-3xl">
-                        Tổng hợp và bóc tách toàn bộ kho lời thoại từ hơn {summary.total_analyzed || 442} video trong database. Xác định chính xác khách hàng bị thuyết phục bởi những câu nói nào, âm điệu gì và bản nhạc nền viral nào.
+                        Tổng hợp và bóc tách toàn bộ kho lời thoại từ hơn {summary.total_analyzed || data?.videos?.length || 0} video trong database. Xác định chính xác khách hàng bị thuyết phục bởi những câu nói nào, âm điệu gì và bản nhạc nền viral nào.
                       </p>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-mono px-3.5 py-1.5 bg-slate-950/90 text-pink-300 rounded-xl border border-pink-500/30 font-semibold shadow-inner">
-                        {summary.total_analyzed || 442} video đã quét âm thanh
+                        {summary.total_analyzed || data?.videos?.length || 0} video đã quét âm thanh
                       </span>
                     </div>
                   </div>
@@ -3749,16 +3749,16 @@ ${data.master_analysis.summary}\n`;
                     <div className="bg-slate-900/80 border border-sky-500/30 p-4 rounded-2xl">
                       <div className="flex items-center justify-between text-xs text-sky-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><Mic size={14} /> Phong Cách Thống Trị</span>
-                        <span className="font-bold font-mono">{summary.distribution?.[0]?.percentage || 56.1}%</span>
+                        <span className="font-bold font-mono">{summary.distribution?.[0]?.percentage || 0}%</span>
                       </div>
-                      <div className="text-lg font-bold text-white truncate">{summary.dominant_style ? summary.dominant_style.split('(')[0] : "🎙️ Voiceover"}</div>
+                      <div className="text-lg font-bold text-white truncate">{summary.dominant_style ? summary.dominant_style.split('(')[0] : (summary.distribution?.[0]?.label?.split('(')[0] || "🎙️ Voiceover")}</div>
                       <p className="text-[11px] text-slate-400 mt-1">Đạt lượt xem và lưu trữ cao nhất toàn ngách</p>
                     </div>
 
                     <div className="bg-slate-900/80 border border-purple-500/30 p-4 rounded-2xl">
                       <div className="flex items-center justify-between text-xs text-purple-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><Bookmark size={14} /> Hiệu Quả Chốt Đơn</span>
-                        <span className="font-bold font-mono">+{summary.saves_boost_percentage || 14.4}%</span>
+                        <span className="font-bold font-mono">+{summary.saves_boost_percentage || voiceCorpus.saves_boost_percentage || 0}%</span>
                       </div>
                       <div className="text-lg font-bold text-white">Tăng Lượt Lưu (Saves)</div>
                       <p className="text-[11px] text-slate-400 mt-1">Khi video có giọng nói so với chỉ dùng nhạc</p>
@@ -3767,10 +3767,10 @@ ${data.master_analysis.summary}\n`;
                     <div className="bg-slate-900/80 border border-pink-500/30 p-4 rounded-2xl">
                       <div className="flex items-center justify-between text-xs text-pink-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><Flame size={14} /> Top 1 Sound Viral</span>
-                        <span className="font-bold font-mono">{((summary.top_sound_views || 686156) / 1000).toFixed(0)}k views</span>
+                        <span className="font-bold font-mono">{Math.round((summary.top_sound_views || allSounds[0]?.total_views || 0) / 1000)}k views</span>
                       </div>
-                      <div className="text-sm font-bold text-white truncate" title={summary.top_sound_title || "original sound - llioniemedia"}>
-                        {summary.top_sound_title || "original sound - llioniemedia"}
+                      <div className="text-sm font-bold text-white truncate" title={summary.top_sound_title || allSounds[0]?.sound_title || "Chưa có sound nổi bật"}>
+                        {summary.top_sound_title || allSounds[0]?.sound_title || "Chưa có sound nổi bật"}
                       </div>
                       <p className="text-[11px] text-slate-400 mt-1">Sound được tái sử dụng nhiều nhất</p>
                     </div>
@@ -3778,9 +3778,13 @@ ${data.master_analysis.summary}\n`;
                     <div className="bg-slate-900/80 border border-emerald-500/30 p-4 rounded-2xl">
                       <div className="flex items-center justify-between text-xs text-emerald-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><MessageCircle size={14} /> Tỷ Lệ Có Giọng Nói</span>
-                        <span className="font-bold font-mono">87.3%</span>
+                        <span className="font-bold font-mono">
+                          {(summary.total_analyzed || data?.videos?.length) ? Math.round(((voiceCorpus.total_spoken_videos || summary.voice_videos_count || 0) / Math.max(summary.total_analyzed || data?.videos?.length || 1, 1)) * 100) : 0}%
+                        </span>
                       </div>
-                      <div className="text-lg font-bold text-white">386 / 442 Video</div>
+                      <div className="text-lg font-bold text-white">
+                        {voiceCorpus.total_spoken_videos || summary.voice_videos_count || 0} / {summary.total_analyzed || data?.videos?.length || 0} Video
+                      </div>
                       <p className="text-[11px] text-slate-400 mt-1">Sử dụng lời thoại thật hoặc lồng nhạc nền</p>
                     </div>
                   </div>

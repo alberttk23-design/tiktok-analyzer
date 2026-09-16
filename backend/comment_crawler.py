@@ -13,15 +13,25 @@ USER_AGENTS = [
 ]
 
 BUYING_INTENT_KEYWORDS = [
+    # English
     "link", "where", "buy", "price", "how much", "cost", "amazon", "store",
-    "planter", "pot", "size", "tall", "height", "shop", "bio", "available",
-    "ship", "order", "code", "discount", "link please", "need this", "want"
+    "size", "tall", "height", "shop", "bio", "available", "ship", "order",
+    "code", "discount", "link please", "need this", "want", "planter", "pot",
+    # Vietnamese
+    "mua ở đâu", "xin link", "link", "giá", "bao nhiêu", "mua", "order", "đặt",
+    "shop", "link shop", "inbox", "ib", "còn không", "giá sao", "báo giá", "xin giá",
+    "mua đâu", "ship không", "mã giảm", "săn sale", "cần mua", "muốn mua"
 ]
 
 OBJECTION_KEYWORDS = [
+    # English
     "fake", "cheap", "plastic", "ugly", "expensive", "too much", "dust",
     "fall off", "leaves fall", "quality", "poor", "rip off", "scam",
-    "shiny", "unrealistic", "return", "broken", "hard to", "waste"
+    "shiny", "unrealistic", "return", "broken", "hard to", "waste",
+    # Vietnamese
+    "đắt", "đắt quá", "rẻ tiền", "lừa đảo", "kém", "kém chất lượng", "hỏng", "vỡ",
+    "xấu", "rởm", "đểu", "phí tiền", "thất vọng", "khác hình", "treo đầu dê", "nhựa",
+    "ọp ẹp", "mỏng", "nhanh hỏng", "không bền", "đừng mua"
 ]
 
 
@@ -296,11 +306,11 @@ def extract_comment_insights(comments: List[Dict[str, Any]], keyword: str) -> Di
 
     # Topic category matching to identify what users comment about most
     topic_definitions = {
-        "Chậu & phụ kiện lót gốc (Planter / Pot / Moss)": ["planter", "pot", "basket", "moss", "dirt", "rocks", "base", "chậu", "giỏ", "rêu", "lót"],
-        "Độ chân thực của lá & thân cây (Realism / Leaves)": ["real", "fake", "plastic", "leaves", "trunk", "bark", "branch", "thật", "giả", "lá", "cành", "thân", "bóng"],
-        "Chiều cao & kích cỡ góc phòng (Height / Size)": ["tall", "height", "size", "feet", "ft", "inch", "corner", "room", "ceiling", "cao", "kích thước", "góc"],
-        "Giá bán & xin link mua hàng (Price / Deal / Link)": ["link", "where", "buy", "price", "cost", "amazon", "target", "how much", "store", "mua ở đâu", "giá", "xin link"],
-        "Cách uốn cành & bung tán (Styling / Fluffing)": ["bend", "fluff", "shape", "style", "unboxing", "uốn", "xòe", "tán"]
+        "Giá bán, ưu đãi & link mua (Price, Deal & Link)": ["link", "where", "buy", "price", "cost", "amazon", "target", "how much", "store", "mua ở đâu", "giá", "xin link", "shopee", "tiktok shop", "deal", "discount", "sale"],
+        "Chất liệu & độ chân thực (Material, Realism & Quality)": ["real", "fake", "plastic", "leaves", "trunk", "bark", "branch", "fabric", "material", "quality", "thật", "giả", "lá", "cành", "thân", "bóng", "chất liệu", "đẹp", "xịn", "kém"],
+        "Kích cỡ, chiều cao & không gian (Size, Fit & Dimensions)": ["tall", "height", "size", "feet", "ft", "inch", "corner", "room", "ceiling", "cao", "kích thước", "góc", "vừa", "rộng", "chật", "planter", "pot", "chậu"],
+        "Hướng dẫn dùng, setup & phối đồ (Styling, Setup & How-to)": ["bend", "fluff", "shape", "style", "unboxing", "uốn", "xòe", "tán", "setup", "cách dùng", "hướng dẫn", "tutorial", "mẹo", "phối", "rêu", "moss"],
+        "Độ bền, vệ sinh & an toàn (Durability, Cleaning & Safety)": ["dust", "clean", "wash", "sturdy", "pet", "cat", "dog", "bụi", "lau", "vệ sinh", "bền", "chắc", "an toàn", "rơi", "đổ", "hỏng"]
     }
 
     topic_counts = {t: 0 for t in topic_definitions}
