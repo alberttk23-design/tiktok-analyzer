@@ -575,13 +575,14 @@ def update_multimodal_analysis(video_id: str, data: dict):
 
     spoken = (data.get("spoken_hook") or "").strip()
     visual = (data.get("visual_hook") or "").strip()
-    new_hook = None
-    if spoken and not spoken.startswith("Lỗi") and "không có lời thoại" not in spoken.lower():
-        new_hook = f"🎙️ Lời thoại mở đầu: \"{spoken}\""
-        if visual and visual != "Lỗi phân tích thị giác":
-            new_hook += f" | 👁️ Thị giác: {visual}"
-    elif visual and visual != "Lỗi phân tích thị giác":
-        new_hook = f"👁️ Hook thị giác: {visual}"
+    new_hook = (data.get("hook") or "").strip()
+    if not new_hook:
+        if spoken and not spoken.startswith("Lỗi") and "không có lời thoại" not in spoken.lower():
+            new_hook = f"🎙️ Lời thoại mở đầu: \"{spoken}\""
+            if visual and visual != "Lỗi phân tích thị giác":
+                new_hook += f" | 👁️ Thị giác: {visual}"
+        elif visual and visual != "Lỗi phân tích thị giác":
+            new_hook = f"👁️ Hook thị giác: {visual}"
 
     if new_hook:
         cursor.execute("""

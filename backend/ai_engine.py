@@ -81,6 +81,85 @@ def classify_ad_angle(caption: str = "", transcript: str = "", spoken_hook: str 
         return "Lifestyle Context Hook"
 
 
+def synthesize_multimodal_hook(
+    spoken_h: str,
+    visual_h: str,
+    setting: str = "",
+    on_screen_text: str = "",
+    visual_style: str = "",
+    caption: str = "",
+    keyword: str = ""
+) -> str:
+    """
+    Synthesize an in-depth Creative DTC Hook Breakdown combining Visual (Qwen-VL) and Audio (Whisper).
+    Never just dumps raw text - breaks down Pattern, Visual Cue, Audio Cue, and Retention Psychology.
+    """
+    spoken_h = (spoken_h or "").strip()
+    visual_h = (visual_h or "").strip()
+    setting = (setting or "").strip()
+    on_screen_text = (on_screen_text or "").strip()
+    visual_style = (visual_style or "").strip()
+
+    has_spoken = bool(spoken_h and not spoken_h.startswith("Lỗi") and "không có lời thoại" not in spoken_h.lower())
+    has_visual = bool(visual_h and visual_h != "Lỗi phân tích thị giác" and "không có khung hình" not in visual_h.lower())
+    has_text = bool(on_screen_text and on_screen_text.lower() not in ["none", "không có", ""])
+    
+    # 1. Determine Hook Strategy Pattern
+    style_lower = visual_style.lower()
+    spoken_lower = spoken_h.lower()
+    cap_lower = (caption or "").lower()
+    combined_txt = f"{spoken_lower} {cap_lower}"
+    
+    if any(w in combined_txt for w in ["stop", "don't", "never", "mistake", "warning", "sai lầm", "đừng"]):
+        hook_pattern = "⚠️ Hook Cảnh Báo / Sai Lầm Thường Gặp (Negative Warning Hook)"
+        psych = "Kích hoạt tâm lý sợ mất mát (loss aversion) và buộc người xem dừng lại để xem mình có mắc lỗi không."
+    elif any(w in combined_txt for w in ["deal", "amazon", "cheap", "costco", "dollar", "$", "giá", "hời", "finds"]):
+        hook_pattern = "🏷️ Hook Săn Deal / Giá Trị Hời (Smart Shopper Deal Hook)"
+        psych = "Đánh trúng tâm lý ham hời và muốn sở hữu món decor sang trọng với mức giá hời."
+    elif any(w in combined_txt for w in ["how to", "diy", "step", "cách", "hướng dẫn", "tự làm"]):
+        hook_pattern = "🛠️ Hook Quy Trình / Hướng Dẫn Thực Chiến (How-To / DIY Hook)"
+        psych = "Tạo kỳ vọng giải pháp thực tế từng bước, kích thích người xem lưu lại (Save) để học theo."
+    elif any(w in combined_txt for w in ["transform", "before", "after", "empty", "upgrade", "trước và sau", "corner", "góc"]):
+        hook_pattern = "✨ Hook Biến Đổi Không Gian (Aesthetic Transformation Hook)"
+        psych = "Khai thác hiệu ứng thị giác tương phản trước - sau để giữ mắt người xem trên màn hình ngay giây đầu."
+    elif "asmr" in combined_txt or "asmr" in style_lower:
+        hook_pattern = "🎧 Hook Trải Nghiệm Giác Quan (ASMR Sensory Hook)"
+        psych = "Kích thích giác quan bằng âm thanh và chuyển động mượt mà, tạo cảm giác thỏa mãn (satisfying)."
+    elif "unboxing" in combined_txt or "unboxing" in style_lower:
+        hook_pattern = "📦 Hook Khui Hộp Trải Nghiệm (POV Unboxing Hook)"
+        psych = "Tạo cảm giác tò mò muốn thấy sản phẩm thực tế bên trong kiện hàng khi vừa mở ra."
+    else:
+        hook_pattern = f"🌿 Hook Bối Cảnh Thực Tế ({visual_style or 'Lifestyle Context'})"
+        psych = "Đặt sản phẩm vào không gian sống tự nhiên, khơi gợi khao khát sở hữu góc trang trí tương tự."
+
+    # 2. Build multi-component hook summary
+    parts = [f"🎯 {hook_pattern}"]
+    
+    # Visual description
+    vis_desc = []
+    if has_visual:
+        vis_desc.append(visual_h)
+    if setting and setting != "Chưa xác định":
+        vis_desc.append(f"trong {setting.lower()}")
+    if has_text:
+        vis_desc.append(f"[Chữ: '{on_screen_text}']")
+    if vis_desc:
+        parts.append(f"👁️ Thị giác (0-2s): {' '.join(vis_desc)}")
+    else:
+        parts.append(f"👁️ Thị giác (0-2s): Trình diễn cận cảnh sản phẩm '{keyword}' trong không gian thực tế")
+
+    # Spoken / Audio description
+    if has_spoken:
+        parts.append(f"🎙️ Thoại mở đầu (0-3s): \"{spoken_h}\"")
+    else:
+        parts.append("🎵 Âm thanh: Sử dụng nhạc nền / hiệu ứng âm thanh kích thích thị giác (không thoại)")
+
+    # Retention trigger
+    parts.append(f"💡 Cơ chế giữ chân: {psych}")
+
+    return " | ".join(parts)
+
+
 def build_fallback_review(video, keyword, comment_insight=None):
     """Generate high-accuracy creative breakdown with Voice-of-Customer comment context and DTC angle."""
     caption = video.get("caption") or ""
@@ -134,20 +213,53 @@ def build_fallback_review(video, keyword, comment_insight=None):
 
     ad_angle = classify_ad_angle(caption=caption, comments_text=comment_details)
     
-    # Intelligent Hook generation: Prefer real spoken speech or clean caption over raw hashtags
+    eng_rate = (likes + comments) / max(views, 1) * 100
+    hook_score = round(min(98.0, max(30.0, eng_rate * 8.0)), 1)
+    save_rate = saves / max(views, 1) * 100
+    conv_score = round(min(95.0, max(25.0, save_rate * 50.0)), 1)
+    viral_score = min(98.0, max(50.0, float(video.get("score") or 75.0)))
+
+    # Hook generation: If multimodal data is present, synthesize deep hook.
+    # Otherwise, provide transparent data-driven estimation without pretending to have watched the video.
     spoken_h = (video.get("spoken_hook") or "").strip()
     visual_h = (video.get("visual_hook") or "").strip()
+    setting_h = (video.get("setting") or "").strip()
+    text_h = (video.get("on_screen_text") or "").strip()
+    style_h = (video.get("visual_style") or "").strip()
 
-    if spoken_h and not spoken_h.startswith("Lỗi") and "không có lời thoại" not in spoken_h.lower():
-        hook_desc = f"🎙️ Lời thoại mở đầu: \"{spoken_h}\""
-        if visual_h and visual_h != "Lỗi phân tích thị giác":
-            hook_desc += f" | 👁️ Thị giác: {visual_h}"
-    elif visual_h and visual_h != "Lỗi phân tích thị giác":
-        hook_desc = f"👁️ Hook thị giác: {visual_h}"
-    elif len(clean_caption) >= 8:
-        hook_desc = f"{hook_type}: Dùng câu mở đầu '{clean_caption[:80]}...' để gây tò mò và giữ chân người xem trong 3 giây đầu."
+    is_multimodal = bool((spoken_h and not spoken_h.startswith("Lỗi") and "không có lời thoại" not in spoken_h.lower()) or (visual_h and visual_h != "Lỗi phân tích thị giác"))
+
+    if is_multimodal:
+        hook_desc = synthesize_multimodal_hook(
+            spoken_h=spoken_h,
+            visual_h=visual_h,
+            setting=setting_h,
+            on_screen_text=text_h,
+            visual_style=style_h,
+            caption=caption,
+            keyword=keyword
+        )
     else:
-        hook_desc = f"{hook_type}: Trình diễn cận cảnh sản phẩm '{keyword}' trong không gian thực tế để thu hút sự chú ý ngay 3 giây đầu."
+        sound_type_label = {
+            "voiceover": "Thoại người thật (Voiceover)",
+            "voice_with_music": "Thoại kèm nhạc nền",
+            "asmr": "Âm thanh ASMR trải nghiệm",
+            "music_only": "Nhạc nền xu hướng",
+            "original_sound": "Âm thanh gốc creator"
+        }.get(video.get("sound_type", "unknown"), "Âm thanh tự nhiên")
+
+        if clean_caption and len(clean_caption) >= 10:
+            cap_preview = f"Thông điệp chính: '{clean_caption[:70]}...'"
+        else:
+            cap_preview = f"Trình diễn sản phẩm '{keyword}'"
+
+        hook_desc = (
+            f"📊 [Dự đoán sơ bộ] {hook_type} | "
+            f"🎵 Âm thanh: {sound_type_label} | "
+            f"📝 {cap_preview} | "
+            f"⚡ Giữ chân tốt nhờ ER {eng_rate:.1f}% & {saves:,} lượt lưu. "
+            f"(Bấm '⚡ Bóc Băng & Soi Góc Quay' để AI tải video về máy và soi từng khung hình + nghe lời thoại thực tế)"
+        )
 
     viral_desc = f"Đạt {views:,} views và {saves:,} lượt lưu ({comments:,} bình luận) nhờ giá trị tham khảo thực tế cho người tìm kiếm '{keyword}'.{top_topics_str}{comment_details}"
 
@@ -742,14 +854,16 @@ def analyze_single_video_multimodal(video_id: str) -> dict:
     )
     mm_data["ad_angle"] = angle
 
-    spoken = (mm_data.get("spoken_hook") or "").strip()
-    visual = (mm_data.get("visual_hook") or "").strip()
-    if spoken and not spoken.startswith("Lỗi") and "không có lời thoại" not in spoken.lower():
-        mm_data["hook"] = f"🎙️ Lời thoại: \"{spoken}\""
-        if visual and visual != "Lỗi phân tích thị giác":
-            mm_data["hook"] += f" | 👁️ Thị giác: {visual}"
-    elif visual and visual != "Lỗi phân tích thị giác":
-        mm_data["hook"] = f"👁️ Hook thị giác: {visual}"
+    # Synthesize deep multimodal hook breakdown (Pattern + Visual + Audio + Retention)
+    mm_data["hook"] = synthesize_multimodal_hook(
+        spoken_h=mm_data.get("spoken_hook", ""),
+        visual_h=mm_data.get("visual_hook", ""),
+        setting=mm_data.get("setting", ""),
+        on_screen_text=mm_data.get("on_screen_text", ""),
+        visual_style=mm_data.get("visual_style", ""),
+        caption=caption,
+        keyword=video.get("keyword") or "olive tree"
+    )
 
     # Update database
     db.update_multimodal_analysis(str(video_id), mm_data)

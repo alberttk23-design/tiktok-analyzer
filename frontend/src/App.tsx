@@ -2537,33 +2537,81 @@ ${data.master_analysis.summary}\n`;
                       {/* 4 Pillars Grid */}
                       <div className="grid md:grid-cols-2 gap-3.5 mt-4">
                         {/* 1. Hook */}
-                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-pink-400 uppercase tracking-wider">
-                              <span>🎣 Hook Mở Đầu (0-3 giây)</span>
-                            </div>
-                            {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") && (
-                              <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
-                                🎙️ Whisper Verified
-                              </span>
-                            )}
-                          </div>
-                          {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") ? (
-                            <div className="space-y-1.5">
-                              <p className="text-xs md:text-sm text-pink-200 font-medium leading-relaxed italic bg-pink-950/20 border border-pink-900/30 rounded-lg p-2">
-                                &ldquo;{rev.spoken_hook}&rdquo;
-                              </p>
-                              {rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác" && (
-                                <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                                  <span>👁️ Thị giác:</span>
-                                  <span className="text-slate-300 font-medium">{rev.visual_hook}</span>
-                                </p>
+                        {/* 1. Hook */}
+                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-pink-400 uppercase tracking-wider">
+                                <span>🎣 Hook Mở Đầu (0-3 giây)</span>
+                              </div>
+                              {((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) ? (
+                                <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                  🎯 Multimodal AI (Whisper + Qwen)
+                                </span>
+                              ) : (
+                                <span className="text-[10px] bg-amber-500/10 border border-amber-500/30 text-amber-400 px-1.5 py-0.5 rounded font-mono flex items-center gap-1">
+                                  📊 Dự đoán sơ bộ (Metadata)
+                                </span>
                               )}
                             </div>
-                          ) : (
-                            <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                              {rev?.hook || "Hook trực quan mở đầu bằng demo thực tế sản phẩm để giữ chân người xem."}
-                            </p>
+
+                            {((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) ? (
+                              <div className="space-y-2">
+                                {rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại") && (
+                                  <div className="bg-pink-950/30 border border-pink-900/40 rounded-xl p-2.5">
+                                    <div className="text-[10px] font-bold uppercase tracking-wider text-pink-400 mb-0.5 flex items-center gap-1">
+                                      <span>🎙️ Lời thoại mở đầu (0-3s)</span>
+                                    </div>
+                                    <p className="text-xs md:text-sm text-pink-100 font-medium leading-relaxed italic">
+                                      &ldquo;{rev.spoken_hook}&rdquo;
+                                    </p>
+                                  </div>
+                                )}
+                                {rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác" && (
+                                  <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 border border-slate-800 rounded-xl p-2.5">
+                                    <p className="flex items-start gap-1.5">
+                                      <strong className="text-violet-400 font-semibold whitespace-nowrap">👁️ Thị giác:</strong>
+                                      <span className="text-slate-200">{rev.visual_hook} {rev.setting && rev.setting !== "Chưa xác định" ? `(${rev.setting.toLowerCase()})` : ""}</span>
+                                    </p>
+                                    {rev?.on_screen_text && rev.on_screen_text !== "None" && rev.on_screen_text !== "Không có" && (
+                                      <p className="flex items-start gap-1.5 text-[11px]">
+                                        <strong className="text-amber-400 font-semibold whitespace-nowrap">🔤 Chữ trên video:</strong>
+                                        <span className="font-mono text-slate-300">&ldquo;{rev.on_screen_text}&rdquo;</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                                  {rev?.hook || "Hook trực quan mở đầu bằng demo thực tế sản phẩm để giữ chân người xem."}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+
+                          {!((rev?.spoken_hook && !rev.spoken_hook.startsWith("Lỗi") && !rev.spoken_hook.toLowerCase().includes("không có lời thoại")) || (rev?.visual_hook && rev.visual_hook !== "Lỗi phân tích thị giác")) && (
+                            <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between">
+                              <span className="text-[11px] text-slate-400">Chưa tải stream & soi khung hình</span>
+                              <button
+                                onClick={() => handleRunMultimodal(vid.video_id)}
+                                disabled={analyzingMultimodalVid === vid.video_id}
+                                className="text-[11px] font-bold text-pink-400 hover:text-pink-300 flex items-center gap-1 transition bg-pink-500/10 border border-pink-500/20 hover:bg-pink-500/20 px-2 py-1 rounded-lg cursor-pointer disabled:opacity-50"
+                              >
+                                {analyzingMultimodalVid === vid.video_id ? (
+                                  <>
+                                    <Loader2 size={11} className="animate-spin" />
+                                    <span>Đang bóc băng...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap size={11} className="text-yellow-400" />
+                                    <span>⚡ Bóc Băng Video Này</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
                           )}
                         </div>
 
