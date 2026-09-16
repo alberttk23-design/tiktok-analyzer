@@ -776,12 +776,11 @@ function App() {
           try {
             const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
             if (jRes.ok) {
-              const jData = await jRes.json();
-              if (jData && jData.job) {
-                const j = jData.job;
+              const j = await jRes.json();
+              if (j && (j.job_id || j.status)) {
                 setCommentCrawlJob({
-                  jobId: j.job_id,
-                  progress: j.progress || 10,
+                  jobId: j.job_id || jobId,
+                  progress: typeof j.progress === "number" ? j.progress : 10,
                   message: j.message || "Đang xử lý bình luận...",
                 });
                 if (j.status === "completed" || j.status === "failed") {
