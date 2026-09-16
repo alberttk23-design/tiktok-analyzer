@@ -884,6 +884,16 @@ def get_results_by_keyword(keyword=None):
 
     master_analysis = master_analyses.get("gemini") or master_analyses.get("ollama") or None
 
+    # Comment stats for the niche (crawled vs total on TikTok)
+    cursor.execute("SELECT COALESCE(SUM(comments), 0) as total_tiktok_comments FROM videos WHERE keyword = ?", (keyword,))
+    t_row = cursor.fetchone()
+    total_tiktok_comments = int(t_row["total_tiktok_comments"]) if t_row else 0
+
+    cursor.execute("SELECT COUNT(*) as total_crawled_comments FROM video_comments WHERE video_id IN (SELECT video_id FROM videos WHERE keyword = ?)", (keyword,))
+    c_row = cursor.fetchone()
+    total_crawled_comments = int(c_row["total_crawled_comments"]) if c_row else 0
+    crawl_pct = round((total_crawled_comments / total_tiktok_comments) * 100, 1) if total_tiktok_comments > 0 else 0
+
     conn.close()
 
     # Get aggregated audio intelligence for this niche
@@ -910,7 +920,12 @@ def get_results_by_keyword(keyword=None):
         "comment_insights": insights_map,
         "master_analysis": master_analysis,
         "master_analyses": master_analyses,
-        "audio_summary": audio_summary
+        "audio_summary": audio_summary,
+        "comment_stats": {
+            "total_tiktok_comments": total_tiktok_comments,
+            "total_crawled_comments": total_crawled_comments,
+            "crawl_percentage": crawl_pct
+        }
     }
 
 

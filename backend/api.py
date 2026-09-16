@@ -43,8 +43,9 @@ class CrawlCommentsRequest(BaseModel):
 
 class CrawlTopCommentsRequest(BaseModel):
     keyword: str
-    top_n: int = 5
-    max_comments_per_video: int = 200
+    top_n: int = 10
+    max_comments_per_video: int = 100
+    crawl_all: bool = False
 
 
 class MasterAnalysisRequest(BaseModel):
@@ -246,10 +247,16 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
     def run_batch_crawl():
         conn = db.get_db()
         cursor = conn.cursor()
-        cursor.execute("""
-        SELECT video_id, creator, comments FROM videos 
-        WHERE keyword = ? ORDER BY comments DESC LIMIT ?
-        """, (keyword, req.top_n))
+        if req.crawl_all:
+            cursor.execute("""
+            SELECT video_id, creator, comments FROM videos 
+            WHERE keyword = ? AND comments > 0 ORDER BY comments DESC LIMIT 60
+            """, (keyword,))
+        else:
+            cursor.execute("""
+            SELECT video_id, creator, comments FROM videos 
+            WHERE keyword = ? AND comments > 0 ORDER BY comments DESC LIMIT ?
+            """, (keyword, req.top_n))
         top_vids = [dict(r) for r in cursor.fetchall()]
         conn.close()
 
@@ -257,9 +264,10 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
         for v in top_vids:
             vid = v["video_id"]
             author = v.get("creator")
+            max_limit = min(int(v.get("comments") or 100), 200) if req.crawl_all else req.max_comments_per_video
             cmts = comment_crawler.fetch_comments_for_video(
                 video_id=vid,
-                max_comments=req.max_comments_per_video,
+                max_comments=max_limit,
                 author_username=author
             )
             if cmts:
@@ -274,10 +282,11 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
 
     background_tasks.add_task(run_batch_crawl)
 
+    target_msg = "toàn bộ video trong ngách" if req.crawl_all else f"top {req.top_n} videos"
     return {
         "status": "started",
         "keyword": keyword,
-        "message": f"Started crawling comments for top {req.top_n} videos (target: up to {req.top_n * req.max_comments_per_video} comments)..."
+        "message": f"Started crawling comments for {target_msg}..."
     }
 
 

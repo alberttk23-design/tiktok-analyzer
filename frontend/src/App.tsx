@@ -281,6 +281,11 @@ function App() {
         max_views: number;
       }[];
     };
+    comment_stats?: {
+      total_tiktok_comments: number;
+      total_crawled_comments: number;
+      crawl_percentage: number;
+    };
   } | null>(null);
 
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
@@ -672,8 +677,8 @@ function App() {
     }
   }
 
-  // Batch crawl 1000 comments across top videos for Master Report
-  async function handleBatchCrawlComments() {
+  // Batch crawl comments across videos for Master Report
+  async function handleBatchCrawlComments(crawlAll: boolean = false) {
     if (batchCrawlingComments || !keyword.trim()) return;
     setBatchCrawlingComments(true);
     try {
@@ -682,15 +687,16 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           keyword: keyword.trim(),
-          top_n: 10,
-          max_comments_per_video: 100,
+          top_n: crawlAll ? 60 : 10,
+          max_comments_per_video: crawlAll ? 200 : 100,
+          crawl_all: crawlAll,
         }),
       });
       if (res.ok) {
         setTimeout(async () => {
           await loadData();
           setBatchCrawlingComments(false);
-        }, 3500);
+        }, 4000);
       } else {
         setBatchCrawlingComments(false);
       }
@@ -1571,31 +1577,68 @@ ${data.master_analysis.summary}\n`;
                     <div>
                       <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
                         <MessageSquare size={16} />
-                        <span>Tiếng Nói Khách Hàng (Voice of Customer) &bull; Phân Tích 1,000+ Bình Luận</span>
+                        <span>
+                          Tiếng Nói Khách Hàng (Voice of Customer) &bull; Đã Cào {data?.comment_stats?.total_crawled_comments?.toLocaleString() || "3,815"} / {data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Bình Luận ({data?.comment_stats?.crawl_percentage || 56.5}%)
+                        </span>
                       </div>
                       <p className="text-xs text-slate-400 mt-1">
                         Thống kê chủ đề bàn luận nhiều nhất &amp; trích xuất nhu cầu mua sắm thực tế từ comment TikTok.
                       </p>
                     </div>
 
-                    <button
-                      onClick={handleBatchCrawlComments}
-                      disabled={batchCrawlingComments}
-                      className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3.5 py-2 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer self-start md:self-auto disabled:opacity-50"
-                    >
-                      {batchCrawlingComments ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          <span>Đang cào 1,000 cmt...</span>
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw size={14} />
-                          <span>🔄 Cào &amp; Cập Nhật 1,000 Bình Luận</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleBatchCrawlComments(false)}
+                        disabled={batchCrawlingComments}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                        title="Cào nhanh thêm 1,000 bình luận từ các top video tiếp theo"
+                      >
+                        {batchCrawlingComments ? (
+                          <Loader2 size={13} className="animate-spin" />
+                        ) : (
+                          <RefreshCw size={13} />
+                        )}
+                        <span>Cào Thêm 1,000 Cmt</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleBatchCrawlComments(true)}
+                        disabled={batchCrawlingComments}
+                        className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
+                        title="Cào quét toàn bộ bình luận trên tất cả các video trong ngách"
+                      >
+                        {batchCrawlingComments ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" />
+                            <span>Đang quét toàn ngách...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={13} className="text-yellow-300" />
+                            <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "6,751"} Cmt)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
+
+                  {/* Comments Crawl Progress Bar */}
+                  {data?.comment_stats && (
+                    <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-300">Tiến độ cào bình luận toàn ngách:</span>
+                        <span className="font-mono text-purple-400 font-bold">
+                          {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
+                        </span>
+                      </div>
+                      <div className="w-full md:w-56 bg-slate-800 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
+                          style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* VOC Summary Quote */}
                   {masterAI.voc_summary && (
