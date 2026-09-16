@@ -38,6 +38,7 @@ import {
   ArrowDown,
   Filter,
   ShoppingCart,
+  Key,
 } from "lucide-react";
 
 interface VideoItem {
@@ -94,6 +95,7 @@ interface CommentInsight {
 
 interface MasterAnalysis {
   keyword: string;
+  engine?: string;
   summary: string;
   viral_triggers: string[];
   friction_solutions: string[];
@@ -162,6 +164,7 @@ function App() {
     briefs: BriefItem[];
     comment_insights?: Record<string, CommentInsight>;
     master_analysis?: MasterAnalysis;
+    master_analyses?: Record<string, MasterAnalysis>;
   } | null>(null);
 
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
@@ -172,7 +175,10 @@ function App() {
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
-  const [runningMasterAI, setRunningMasterAI] = useState(false);
+  const [selectedEngine, setSelectedEngine] = useState<"gemini" | "ollama">("gemini");
+  const [runningEngineAI, setRunningEngineAI] = useState<boolean>(false);
+  const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("gemini_api_key") || "");
+  const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
 
   // Video-specific comment crawl state
@@ -298,15 +304,19 @@ function App() {
     }
   }
 
-  // Trigger 100% Local Master AI Analysis
-  async function handleRunMasterAI() {
-    if (runningMasterAI || !keyword.trim()) return;
-    setRunningMasterAI(true);
+  // Trigger Master AI Analysis (Ollama Local or Gemini Antigravity)
+  async function handleRunMasterEngineAI(engine: "gemini" | "ollama") {
+    if (runningEngineAI || !keyword.trim()) return;
+    setRunningEngineAI(true);
     try {
       const res = await fetch(`${API_BASE}/api/analyze-master`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim() }),
+        body: JSON.stringify({
+          keyword: keyword.trim(),
+          engine: engine,
+          api_key: geminiApiKey.trim() || undefined,
+        }),
       });
       if (res.ok) {
         const json = await res.json();
@@ -314,15 +324,30 @@ function App() {
           setData({
             ...data,
             master_analysis: json.master_analysis,
+            master_analyses: {
+              ...(data.master_analyses || {}),
+              [engine]: json.master_analysis,
+            },
           });
+          setSelectedEngine(engine);
           setActiveTab("overall");
         }
       }
     } catch (e) {
-      console.error("Master AI run error:", e);
+      console.error("Master Engine AI run error:", e);
     } finally {
-      setRunningMasterAI(false);
+      setRunningEngineAI(false);
     }
+  }
+
+  async function handleRunMasterAI() {
+    await handleRunMasterEngineAI(selectedEngine);
+  }
+
+  function handleSaveApiKey(key: string) {
+    setGeminiApiKey(key);
+    localStorage.setItem("gemini_api_key", key);
+    setShowApiKeyModal(false);
   }
 
   // On-demand crawl 1000 comments for a specific video
@@ -555,7 +580,15 @@ ${data.master_analysis.summary}\n`;
   }
 
   const insightsMap = data?.comment_insights || {};
-  const masterAI = data?.master_analysis;
+  const masterAI = useMemo(() => {
+    if (data?.master_analyses && data.master_analyses[selectedEngine]) {
+      return data.master_analyses[selectedEngine];
+    }
+    if (data?.master_analysis?.engine === selectedEngine) {
+      return data.master_analysis;
+    }
+    return data?.master_analysis || null;
+  }, [data?.master_analyses, data?.master_analysis, selectedEngine]);
 
   const sortedFilteredVideos = useMemo(() => {
     if (!data?.videos) return [];
@@ -716,11 +749,11 @@ ${data.master_analysis.summary}\n`;
             <div className="flex flex-wrap items-center gap-2 pt-1 md:pt-0">
               <button
                 onClick={handleRunMasterAI}
-                disabled={runningMasterAI}
+                disabled={runningEngineAI}
                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 text-white font-semibold px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
                 title="Chạy mô hình local Ollama phân tích bức tranh tổng thể toàn bộ ngách (0 đồng, không cần API)"
               >
-                {runningMasterAI ? (
+                {runningEngineAI ? (
                   <>
                     <Loader2 size={13} className="animate-spin" />
                     <span>Đang tổng hợp local...</span>
@@ -923,45 +956,135 @@ ${data.master_analysis.summary}\n`;
           </button>
         </div>
 
-        {/* TAB: MASTER LOCAL AI OVERALL ANALYSIS */}
+        {/* TAB: MASTER AI OVERALL ANALYSIS (DUAL ENGINE: OLLAMA LOCAL & GEMINI ANTIGRAVITY) */}
         {activeTab === "overall" && (
           <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            {/* Dual Engine Switcher */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 bg-slate-950 p-2.5 rounded-3xl border border-slate-800">
+              {/* Option 2: Gemini 3.8 Flash High */}
+              <button
+                onClick={() => setSelectedEngine("gemini")}
+                className={`p-4 rounded-2xl text-left transition cursor-pointer relative overflow-hidden border ${
+                  selectedEngine === "gemini"
+                    ? "bg-gradient-to-r from-violet-950/90 via-purple-900/60 to-pink-950/90 border-violet-500 shadow-xl shadow-violet-900/30 text-white"
+                    : "bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-900/80"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 font-bold text-sm md:text-base text-white">
+                    <Sparkles size={18} className="text-pink-400" />
+                    <span>Option 2: Gemini 3.8 Flash High (Antigravity AI)</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-violet-900/80 border border-violet-600 text-violet-200 font-bold">
+                    SOTA Strategic
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Trí tuệ Google DeepMind cấp cao &bull; Đọc toàn bộ 442 video &amp; 3,800+ comment &bull; Đúc kết chiến lược DTC &amp; kịch bản triệu view sắc bén.
+                </p>
+              </button>
+
+              {/* Option 1: Ollama Local */}
+              <button
+                onClick={() => setSelectedEngine("ollama")}
+                className={`p-4 rounded-2xl text-left transition cursor-pointer relative overflow-hidden border ${
+                  selectedEngine === "ollama"
+                    ? "bg-gradient-to-r from-emerald-950/90 to-slate-900 border-emerald-500 shadow-xl shadow-emerald-900/20 text-white"
+                    : "bg-slate-900/40 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:bg-slate-900/80"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2 font-bold text-sm md:text-base text-white">
+                    <Cpu size={18} className="text-emerald-400" />
+                    <span>Option 1: Ollama Local (M4 Hardware)</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-emerald-900/80 border border-emerald-600 text-emerald-200 font-bold">
+                    $0 Cục Bộ M4
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Mô hình Qwen 4B chạy 100% Cục Bộ M4 &bull; Hoàn toàn offline không cần internet &bull; $0 chi phí &bull; Bảo mật dữ liệu nội bộ.
+                </p>
+              </button>
+            </div>
+
+            {/* Action Toolbar for the Selected Engine */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800">
               <div>
-                <h2 className="text-xl font-bold flex items-center gap-2 text-white">
-                  <Cpu className="text-emerald-400" size={24} />
-                  Báo Cáo Chiến Lược AI Tổng Thể (Chạy 100% Local Trên Máy Của Bạn)
-                </h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
+                    {selectedEngine === "gemini" ? (
+                      <>
+                        <Sparkles className="text-pink-400" size={22} />
+                        <span>Báo Cáo Chiến Lược Gemini 3.8 Flash High (Antigravity AI)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Cpu className="text-emerald-400" size={22} />
+                        <span>Báo Cáo Chiến Lược Ollama Local (M4 Hardware)</span>
+                      </>
+                    )}
+                  </h2>
+                </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Mô hình Ollama địa phương đọc toàn bộ database, chỉ số view/tym/comment và phân tích bức tranh vĩ mô.
+                  {selectedEngine === "gemini"
+                    ? "Phân tích chiến lược thương mại điện tử DTC bởi Google DeepMind Gemini từ dữ liệu SQLite."
+                    : "Mô hình Ollama địa phương đọc toàn bộ database, chỉ số view/tym/comment và phân tích cục bộ."}
                 </p>
               </div>
 
-              <button
-                onClick={handleRunMasterAI}
-                disabled={runningMasterAI}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer self-start md:self-auto disabled:opacity-50"
-              >
-                {runningMasterAI ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Đang tổng hợp local...</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw size={14} />
-                    <span>Cập Nhật Phân Tích Local Mới</span>
-                  </>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedEngine === "gemini" && (
+                  <button
+                    onClick={() => setShowApiKeyModal(true)}
+                    className="bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer border border-slate-700"
+                    title="Cấu hình Gemini API Key tùy chọn"
+                  >
+                    <Key size={13} className="text-amber-400" />
+                    <span>{geminiApiKey ? "Đã có API Key" : "Cấu Hình API Key"}</span>
+                  </button>
                 )}
-              </button>
+
+                <button
+                  onClick={() => handleRunMasterEngineAI(selectedEngine)}
+                  disabled={runningEngineAI}
+                  className={`font-semibold px-4 py-2 rounded-xl text-xs flex items-center gap-2 transition cursor-pointer disabled:opacity-50 text-white shadow-lg ${
+                    selectedEngine === "gemini"
+                      ? "bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 shadow-violet-600/30"
+                      : "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20"
+                  }`}
+                >
+                  {runningEngineAI ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Đang phân tích {selectedEngine === "gemini" ? "Gemini..." : "Ollama..."}</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw size={14} />
+                      <span>
+                        {selectedEngine === "gemini"
+                          ? "⚡ Cập Nhật Bằng Gemini 3.8 Flash High"
+                          : "🔄 Chạy Lại Ollama Local (M4)"}
+                      </span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
 
             {!masterAI ? (
               <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
-                <Cpu size={40} className="mx-auto mb-3 text-slate-600" />
-                <p className="text-base font-semibold">Chưa có báo cáo AI tổng thể cho từ khóa này.</p>
+                {selectedEngine === "gemini" ? (
+                  <Sparkles size={40} className="mx-auto mb-3 text-violet-400" />
+                ) : (
+                  <Cpu size={40} className="mx-auto mb-3 text-emerald-400" />
+                )}
+                <p className="text-base font-semibold">
+                  Chưa có báo cáo {selectedEngine === "gemini" ? "Gemini 3.8 Flash High" : "Ollama Local"} cho từ khóa này.
+                </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  Bấm nút "⚡ Chạy Phân Tích Tổng Thể (Local)" ở trên để kích hoạt Ollama chạy phân tích 100% nội bộ.
+                  Bấm nút bên trên để kích hoạt phân tích tự động.
                 </p>
               </div>
             ) : (
@@ -2234,6 +2357,63 @@ ${data.master_analysis.summary}\n`;
               >
                 Đóng
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* Gemini API Key Configuration Modal */}
+        {showApiKeyModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-gradient-to-tr from-violet-500 to-pink-500 rounded-xl shadow-md">
+                    <Key size={16} className="text-white" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Cấu Hình Google Gemini API Key</h3>
+                </div>
+                <button
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="text-slate-400 hover:text-white text-lg font-bold px-2 py-1 rounded-lg cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <p className="text-xs text-slate-300 leading-relaxed mb-4">
+                Bạn có thể nhập Google Gemini API Key để backend gọi trực tiếp Gemini Cloud API bất cứ lúc nào. Nếu không nhập, Antigravity AI sẽ tiếp tục tổng hợp dữ liệu chiến lược cho bạn.
+              </p>
+
+              <div className="space-y-2.5 mb-5">
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">
+                  Gemini API Key:
+                </label>
+                <input
+                  type="password"
+                  placeholder="AIzaSy..."
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-violet-500 font-mono"
+                />
+                <p className="text-[11px] text-slate-500">
+                  Key được lưu an toàn trong LocalStorage của trình duyệt và gửi qua kết nối cục bộ.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setShowApiKeyModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={() => handleSaveApiKey(geminiApiKey)}
+                  className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer shadow-lg shadow-violet-600/30"
+                >
+                  Lưu Cấu Hình
+                </button>
+              </div>
             </div>
           </div>
         )}

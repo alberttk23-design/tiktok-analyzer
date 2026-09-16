@@ -175,12 +175,46 @@ def init_db():
     if "top_topics_json" not in ci_cols:
         cursor.execute("ALTER TABLE comment_insights ADD COLUMN top_topics_json TEXT")
 
-    # Migration for Voice-of-Customer in master_analysis
+    # Migration for engine ('ollama' vs 'gemini') and composite PK in master_analysis
     cursor.execute("PRAGMA table_info(master_analysis)")
-    ma_cols = {row["name"] for row in cursor.fetchall()}
-    for c in ["customer_interests_json", "buying_desires_json", "top_objections_json", "voc_summary"]:
-        if c not in ma_cols:
-            cursor.execute(f"ALTER TABLE master_analysis ADD COLUMN {c} TEXT")
+    ma_info = cursor.fetchall()
+    has_engine = any(row["name"] == "engine" for row in ma_info)
+    pk_count = sum(1 for row in ma_info if row["pk"] > 0)
+
+    if not has_engine or pk_count < 2:
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS master_analysis_v2 (
+            keyword TEXT,
+            engine TEXT DEFAULT 'gemini',
+            summary TEXT,
+            viral_triggers_json TEXT,
+            friction_solutions_json TEXT,
+            winning_blueprint TEXT,
+            customer_interests_json TEXT,
+            buying_desires_json TEXT,
+            top_objections_json TEXT,
+            voc_summary TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (keyword, engine)
+        )
+        """)
+        try:
+            cursor.execute("""
+            INSERT OR IGNORE INTO master_analysis_v2 (
+                keyword, engine, summary, viral_triggers_json, friction_solutions_json,
+                winning_blueprint, customer_interests_json, buying_desires_json,
+                top_objections_json, voc_summary, updated_at
+            )
+            SELECT 
+                keyword, 'ollama', summary, viral_triggers_json, friction_solutions_json,
+                winning_blueprint, customer_interests_json, buying_desires_json,
+                top_objections_json, voc_summary, updated_at
+            FROM master_analysis
+            """)
+            cursor.execute("DROP TABLE master_analysis")
+            cursor.execute("ALTER TABLE master_analysis_v2 RENAME TO master_analysis")
+        except Exception as e:
+            print(f"[DB Migration Notice] master_analysis v2 migration: {e}")
 
     conn.commit()
     conn.close()
@@ -318,16 +352,16 @@ def get_video_comments(video_id: str, limit: int = 100):
     return [dict(r) for r in rows]
 
 
-def save_master_analysis(keyword: str, analysis: dict):
-    """Save 100% local holistic analysis with deep Voice of Customer."""
+def save_master_analysis(keyword: str, analysis: dict, engine: str = "gemini"):
+    """Save holistic analysis for specified engine ('ollama' or 'gemini')."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
     INSERT INTO master_analysis (
-        keyword, summary, viral_triggers_json, friction_solutions_json, winning_blueprint,
+        keyword, engine, summary, viral_triggers_json, friction_solutions_json, winning_blueprint,
         customer_interests_json, buying_desires_json, top_objections_json, voc_summary, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-    ON CONFLICT(keyword) DO UPDATE SET
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(keyword, engine) DO UPDATE SET
         summary = excluded.summary,
         viral_triggers_json = excluded.viral_triggers_json,
         friction_solutions_json = excluded.friction_solutions_json,
@@ -339,6 +373,7 @@ def save_master_analysis(keyword: str, analysis: dict):
         updated_at = CURRENT_TIMESTAMP
     """, (
         keyword,
+        engine,
         analysis.get("summary", ""),
         json.dumps(analysis.get("viral_triggers", []), ensure_ascii=False),
         json.dumps(analysis.get("friction_solutions", []), ensure_ascii=False),
@@ -352,11 +387,14 @@ def save_master_analysis(keyword: str, analysis: dict):
     conn.close()
 
 
-def get_master_analysis(keyword: str):
-    """Get stored master analysis."""
+def get_master_analysis(keyword: str, engine: str = None):
+    """Get stored master analysis for keyword and optional engine."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM master_analysis WHERE keyword = ?", (keyword,))
+    if engine:
+        cursor.execute("SELECT * FROM master_analysis WHERE keyword = ? AND engine = ?", (keyword, engine))
+    else:
+        cursor.execute("SELECT * FROM master_analysis WHERE keyword = ? ORDER BY CASE WHEN engine = 'gemini' THEN 1 ELSE 2 END, updated_at DESC LIMIT 1", (keyword,))
     row = cursor.fetchone()
     conn.close()
     if not row:
@@ -369,6 +407,27 @@ def get_master_analysis(keyword: str):
         except Exception:
             item[clean_key] = []
     return item
+
+
+def get_all_master_analyses_for_keyword(keyword: str):
+    """Get all master analyses for keyword mapped by engine ('ollama' and 'gemini')."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM master_analysis WHERE keyword = ?", (keyword,))
+    rows = cursor.fetchall()
+    conn.close()
+    res = {}
+    for row in rows:
+        item = dict(row)
+        for key in ["viral_triggers_json", "friction_solutions_json", "customer_interests_json", "buying_desires_json", "top_objections_json"]:
+            clean_key = key.replace("_json", "")
+            try:
+                item[clean_key] = json.loads(item.get(key) or "[]")
+            except Exception:
+                item[clean_key] = []
+        eng = item.get("engine") or "gemini"
+        res[eng] = item
+    return res
 
 
 def save_review(review_data):
@@ -625,18 +684,22 @@ def get_results_by_keyword(keyword=None):
                 item[clean_key] = []
         insights_map[item["video_id"]] = item
 
-    # Master analysis
+    # Master analyses (both 'ollama' and 'gemini')
     cursor.execute("SELECT * FROM master_analysis WHERE keyword = ?", (keyword,))
-    master_row = cursor.fetchone()
-    master_analysis = None
-    if master_row:
-        master_analysis = dict(master_row)
+    master_rows = cursor.fetchall()
+    master_analyses = {}
+    for mr in master_rows:
+        m_item = dict(mr)
         for key in ["viral_triggers_json", "friction_solutions_json", "customer_interests_json", "buying_desires_json", "top_objections_json"]:
             clean_key = key.replace("_json", "")
             try:
-                master_analysis[clean_key] = json.loads(master_analysis.get(key) or "[]")
+                m_item[clean_key] = json.loads(m_item.get(key) or "[]")
             except Exception:
-                master_analysis[clean_key] = []
+                m_item[clean_key] = []
+        eng = m_item.get("engine") or "gemini"
+        master_analyses[eng] = m_item
+
+    master_analysis = master_analyses.get("gemini") or master_analyses.get("ollama") or None
 
     conn.close()
 
@@ -659,7 +722,8 @@ def get_results_by_keyword(keyword=None):
         "ideas": ideas,
         "briefs": briefs,
         "comment_insights": insights_map,
-        "master_analysis": master_analysis
+        "master_analysis": master_analysis,
+        "master_analyses": master_analyses
     }
 
 

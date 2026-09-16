@@ -46,6 +46,12 @@ class CrawlTopCommentsRequest(BaseModel):
     max_comments_per_video: int = 200
 
 
+class MasterAnalysisRequest(BaseModel):
+    keyword: str
+    engine: str = "gemini"
+    api_key: Optional[str] = None
+
+
 class MultimodalBatchRequest(BaseModel):
     keyword: str
     top_n: int = 5
@@ -124,20 +130,26 @@ def get_results(keyword: Optional[str] = Query(None)):
 
 
 @app.post("/api/analyze-master")
-def run_master_analysis_endpoint(req: AnalyzeRequest):
-    """Run 100% Local Master AI Analysis via local Ollama without external APIs."""
-    result = ai_engine.generate_master_holistic_analysis(req.keyword)
+def run_master_analysis_endpoint(req: MasterAnalysisRequest):
+    """Run Master AI Analysis via either Gemini (Antigravity) or Ollama (Local M4)."""
+    if req.engine == "ollama":
+        result = ai_engine.generate_master_holistic_analysis(req.keyword)
+    else:
+        result = ai_engine.generate_gemini_master_analysis(req.keyword, api_key=req.api_key)
     return {
         "status": "success",
         "keyword": req.keyword,
+        "engine": req.engine,
         "master_analysis": result
     }
 
 
 @app.get("/api/master-analysis")
-def get_master_analysis_endpoint(keyword: Optional[str] = Query(None)):
+def get_master_analysis_endpoint(keyword: Optional[str] = Query(None), engine: Optional[str] = Query(None)):
     """Get stored master holistic analysis."""
     res = db.get_results_by_keyword(keyword)
+    if engine:
+        return (res.get("master_analyses") or {}).get(engine) or {}
     return res.get("master_analysis") or {}
 
 
