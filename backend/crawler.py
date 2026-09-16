@@ -1,4 +1,5 @@
 import json
+import random
 import re
 import subprocess
 import sys
@@ -76,28 +77,33 @@ def generate_niche_search_queries(base_keyword: str) -> list:
     """
     Generate high-intent semantic query vectors for a product niche
     to bypass TikTok's ~100 search result ceiling and discover hundreds of new videos.
+    Places primary hashtag vectors immediately after the base query.
     """
     kw = base_keyword.strip()
+    clean_tag = re.sub(r'[^a-zA-Z0-9]', '', kw).lower()
+
     modifiers = [
-        kw,                         # Base query first (e.g. "faux olive tree")
-        f"amazon {kw}",             # Top shopping / storefront intent
-        f"{kw} review",             # Buyer review & UGC proof
-        f"{kw} styling",            # Home decor styling & setup
-        f"realistic {kw}",          # Realism proof & quality comparison
-        f"{kw} finds",              # Viral finds
-        f"{kw} unboxing",           # Product unboxing
-        f"best {kw}",               # Best recommendations
-        f"honest {kw} review",      # Critical & authentic reviews
-        f"{kw} target",             # Alternative retail
-        f"{kw} decor",              # Room decor setup
-        f"affordable {kw}",         # Budget / deal seekers
-        f"{kw} tiktok shop",        # TikTok Shop affiliate showcase
-        f"{kw} haul",               # Shopping hauls
-        f"{kw} aesthetic",          # Aesthetic / room transformation
-        f"{kw} must haves",         # Viral must haves
-        f"worth it {kw}",           # Buyer evaluation
-        f"{kw} comparison",         # Comparative tests
-        f"diy {kw}"                 # DIY & craftsmanship
+        kw,                                                     # Vector 1: Base query first (e.g. "faux olive tree")
+        f"#{clean_tag}" if clean_tag else f"#{kw}",            # Vector 2: Primary hashtag (e.g. "#fauxolivetree")
+        f"amazon {kw}",                                         # Vector 3: Top shopping / storefront intent
+        f"{kw} review",                                         # Vector 4: Buyer review & UGC proof
+        f"honest {kw} review",                                  # Vector 5: Critical & authentic reviews
+        f"realistic {kw}",                                      # Vector 6: Realism proof & quality comparison
+        f"#{clean_tag}decor" if clean_tag else f"{kw} decor",    # Vector 7: Niche decor hashtag
+        f"{kw} styling",                                        # Vector 8: Home decor styling & setup
+        f"{kw} unboxing",                                       # Vector 9: Product unboxing
+        f"best {kw}",                                           # Vector 10: Best recommendations
+        f"#{clean_tag}finds" if clean_tag else f"{kw} finds",    # Vector 11: Niche finds hashtag
+        f"{kw} tiktok shop",                                    # Vector 12: TikTok Shop showcase
+        f"{kw} finds",                                          # Vector 13: Viral finds
+        f"affordable {kw}",                                     # Vector 14: Budget / deal seekers
+        f"{kw} haul",                                           # Vector 15: Shopping hauls
+        f"{kw} aesthetic",                                      # Vector 16: Room aesthetic
+        f"{kw} must haves",                                     # Vector 17: Viral must haves
+        f"worth it {kw}",                                       # Vector 18: Buyer evaluation
+        f"{kw} target",                                         # Vector 19: Alternative retail
+        f"{kw} comparison",                                     # Vector 20: Comparative tests
+        f"diy {kw}"                                             # Vector 21: DIY & craftsmanship
     ]
     seen = set()
     result = []
@@ -131,11 +137,16 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
 
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
+    current_vector_has_more = [True]
+
     def handle_response(response):
         """Intercept TikTok internal search API responses containing raw video metadata."""
         if ("/api/search/item/full/" in response.url or "/api/search/general/full/" in response.url) and response.status == 200:
             try:
                 data = response.json()
+                if data.get("has_more") == 0:
+                    current_vector_has_more[0] = False
+
                 items = data.get("item_list", []) or [e.get("item") for e in data.get("data", []) if e.get("item")]
                 for item in items:
                     if not item or not isinstance(item, dict):
@@ -209,6 +220,7 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 print(f"[Crawler] Successfully reached target {target_count} brand-new videos!")
                 break
 
+            current_vector_has_more[0] = True
             search_url = f"https://www.tiktok.com/search?q={quote(query_str)}"
             print(f"[Crawler] >>> Traversing Vector {q_idx + 1}/{len(query_vectors)}: '{query_str}' ({len(discovered_new_videos)}/{target_count} new found so far)")
 
@@ -223,13 +235,39 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
 
             try:
                 page.goto(search_url, timeout=45000)
+                page.wait_for_load_state("domcontentloaded")
                 page.wait_for_timeout(3500)
             except Exception as e:
                 print(f"[Crawler] Vector navigation error for '{query_str}': {e}")
                 continue
 
+            # Auto-dismiss modal / login popups
+            try:
+                page.keyboard.press("Escape")
+                page.evaluate("""() => {
+                    const modalClose = document.querySelector('[data-e2e="modal-close-inner-button"], button[aria-label="Close"]');
+                    if (modalClose) modalClose.click();
+                }""")
+            except Exception:
+                pass
+
+            # Auto-recover if "Something went wrong" error screen appears
+            try:
+                has_err = page.evaluate("() => Boolean(document.querySelector('[data-e2e=\"search-error-title\"]'))")
+                if has_err:
+                    print(f"[Crawler] Notice 'Something went wrong' on '{query_str}', attempting auto-recovery...")
+                    try:
+                        page.click("text='Videos'", timeout=3000)
+                        page.wait_for_timeout(3000)
+                    except Exception:
+                        page.reload()
+                        page.wait_for_timeout(3500)
+            except Exception:
+                pass
+
             # Scale scroll depth based on desired batch size (more scrolls if targeting 100-200)
-            max_scrolls_per_query = 28 if target_count >= 100 else (20 if target_count >= 50 else 15)
+            max_scrolls_per_query = 35 if target_count >= 100 else (25 if target_count >= 50 else 18)
+            max_stagnant = 7
             consecutive_stagnant = 0
             last_total_seen = len(seen_in_session)
 
@@ -237,17 +275,40 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 if len(discovered_new_videos) >= target_count:
                     break
 
-                page.evaluate("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
-                page.mouse.wheel(0, 4000)
+                # 1. Multi-step progressive human-like wheel scroll (flicks)
+                for _ in range(3):
+                    page.mouse.wheel(0, random.randint(500, 850))
+                    page.wait_for_timeout(random.randint(150, 300))
+
+                # 2. Key navigation down
                 page.keyboard.press("PageDown")
-                page.keyboard.press("PageDown")
-                page.wait_for_timeout(2000)
+                page.wait_for_timeout(random.randint(200, 350))
+
+                # 3. Intersection observer unstick / re-trigger gesture if stagnant
+                if consecutive_stagnant > 0:
+                    page.evaluate("window.scrollBy(0, -350)")
+                    page.wait_for_timeout(300)
+                    page.evaluate("window.scrollBy(0, 800)")
+                    page.keyboard.press("End")
+                else:
+                    page.evaluate("window.scrollBy({top: 600, behavior: 'smooth'})")
+
+                # 4. Realistic human jitter wait for TikTok CDN & API packet streaming
+                wait_delay = random.uniform(2.8, 3.8)
+                time.sleep(wait_delay)
 
                 current_total_seen = len(seen_in_session)
                 if current_total_seen == last_total_seen:
                     consecutive_stagnant += 1
-                    if consecutive_stagnant >= 4:
-                        print(f"[Crawler] Vector '{query_str}' exhausted. Switching to next search vector.")
+                    print(f"[Crawler] Vector '{query_str}': waiting/retrying scroll ({consecutive_stagnant}/{max_stagnant})...")
+
+                    # If TikTok API officially returned has_more == 0, break early to next vector
+                    if not current_vector_has_more[0]:
+                        print(f"[Crawler] Vector '{query_str}' reported has_more=0 by TikTok API. Exhausted.")
+                        break
+
+                    if consecutive_stagnant >= max_stagnant:
+                        print(f"[Crawler] Vector '{query_str}' exhausted after {max_stagnant} thorough retries. Switching to next vector.")
                         break
                 else:
                     consecutive_stagnant = 0
