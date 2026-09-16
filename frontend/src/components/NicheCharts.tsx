@@ -364,9 +364,18 @@ export const NicheCharts: React.FC<NicheChartsProps> = ({ videos = [], reviews =
       {/* CHART 2: TIMELINE TREND */}
       {activeChartTab === 'timeline' && (
         <div className="space-y-4 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between text-xs text-slate-400">
-            <span>Biểu đồ thể hiện dung lượng lượt xem và độ quan tâm (Saves) theo từng tháng đăng tải video:</span>
-            <span className="font-mono text-indigo-300">{timelineData.length} Mốc Thời Gian</span>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 text-xs text-slate-400">
+            <div>
+              <p className="text-slate-300 font-medium">
+                Biểu đồ phân tích <span className="text-sky-400 font-semibold">Cohort theo Tháng Xuất Bản</span> (Dựa trên ngày video được upload lên TikTok):
+              </p>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Hiển thị tổng Views và Saves tích lũy đến nay của các video được sản xuất trong tháng đó &bull; Giúp xác định tính mùa vụ và nội dung bền vững (Evergreen).
+              </p>
+            </div>
+            <span className="font-mono text-indigo-300 self-start md:self-auto bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg">
+              {timelineData.length} Mốc Tháng
+            </span>
           </div>
 
           <div className="h-[380px] w-full bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4">
@@ -388,11 +397,23 @@ export const NicheCharts: React.FC<NicheChartsProps> = ({ videos = [], reviews =
                 <Tooltip
                   content={({ payload, label }) => {
                     if (!payload || payload.length === 0) return null;
+                    const item = payload[0]?.payload || {};
                     return (
-                      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-1">
-                        <div className="font-bold text-white border-b border-slate-800 pb-1">Tháng: {label}</div>
-                        <div className="text-sky-400">Tổng Views: <strong>{(payload[0]?.value as number)?.toLocaleString()}k</strong></div>
-                        <div className="text-emerald-400">Tổng Saves: <strong>{(payload[1]?.value as number)?.toLocaleString()}</strong></div>
+                      <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl shadow-2xl text-xs space-y-1.5 min-w-[190px]">
+                        <div className="font-bold text-white border-b border-slate-800 pb-1 flex items-center justify-between">
+                          <span>Tháng: {label}</span>
+                          <span className="text-slate-400 text-[11px] font-normal">{item.count} video</span>
+                        </div>
+                        <div className="text-sky-400 text-[11px]">
+                          👁️ Tổng Views: <strong className="font-mono text-white">{(item.viewsK * 1000)?.toLocaleString()}</strong>
+                        </div>
+                        <div className="text-emerald-400 text-[11px]">
+                          🔖 Tổng Saves: <strong className="font-mono text-white">{(item.saves)?.toLocaleString()}</strong>
+                        </div>
+                        <div className="text-amber-400 text-[11px] pt-0.5 border-t border-slate-800/60 flex items-center justify-between">
+                          <span>Tỷ lệ Save trung bình:</span>
+                          <strong className="font-mono">{item.avgSaveRate}%</strong>
+                        </div>
                       </div>
                     );
                   }}
