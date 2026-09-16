@@ -775,6 +775,33 @@ def rename_niche_folder(old_name: str, new_name: str):
     return {"old_name": old_c, "new_name": new_c}
 
 
+def merge_niche_folders(source_name: str, target_name: str):
+    """
+    Merge all videos, reviews, ideas, briefs, insights from source_name into target_name.
+    Then delete source_name from niche_folders.
+    """
+    src = source_name.strip()
+    tgt = target_name.strip()
+    if not src or not tgt:
+        raise ValueError("Tên thư mục nguồn và đích không được để trống")
+    if src.lower() == tgt.lower():
+        raise ValueError("Không thể gộp một thư mục vào chính nó")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE videos SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE analysis_reviews SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE comment_insights SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE creative_ideas SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE production_briefs SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE master_analysis SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE crawl_jobs SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("DELETE FROM niche_folders WHERE name = ?", (src,))
+    cursor.execute("UPDATE niche_folders SET updated_at = CURRENT_TIMESTAMP WHERE name = ?", (tgt,))
+    conn.commit()
+    conn.close()
+    return {"source": src, "target": tgt}
+
+
 def get_results_by_keyword(keyword=None):
     conn = get_db()
     cursor = conn.cursor()

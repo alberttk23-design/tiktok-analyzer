@@ -35,6 +35,7 @@ app.add_middleware(
 class AnalyzeRequest(BaseModel):
     keyword: str
     limit: int = 20
+    target_folder: Optional[str] = None
 
 
 class CrawlCommentsRequest(BaseModel):
@@ -79,20 +80,26 @@ class RenameFolderRequest(BaseModel):
     new_name: str
 
 
+class MergeFolderRequest(BaseModel):
+    source_folder: str
+    target_folder: str
 
-def execute_pipeline(job_id: str, keyword: str, limit: int):
+
+
+def execute_pipeline(job_id: str, keyword: str, limit: int, target_folder: Optional[str] = None):
     """Background task to run Crawler (with history check, 20 new videos, comments) and AI Analysis."""
+    pool_folder = (target_folder or keyword).strip()
     try:
-        print(f"[API Pipeline] Starting job {job_id} for keyword '{keyword}'...")
+        print(f"[API Pipeline] Starting job {job_id} for search '{keyword}' -> Saving into folder '{pool_folder}'...")
         # Step 1: Crawler with deduplication against SQLite & initial comment fetch
-        crawler.crawl_tiktok_videos(keyword, target_count=limit, job_id=job_id)
+        crawler.crawl_tiktok_videos(keyword, target_count=limit, job_id=job_id, target_folder=pool_folder)
 
         # Step 2: AI Analysis incorporating comment insights
-        ai_engine.run_ai_analysis_pipeline(keyword, job_id=job_id)
+        ai_engine.run_ai_analysis_pipeline(pool_folder, job_id=job_id)
 
         # Step 3: Local Master Holistic Synthesis
         try:
-            ai_engine.generate_master_holistic_analysis(keyword)
+            ai_engine.generate_master_holistic_analysis(pool_folder)
         except Exception as me:
             print(f"[API Pipeline] Master analysis notice: {me}")
 
@@ -118,21 +125,26 @@ def analyze(req: AnalyzeRequest, background_tasks: BackgroundTasks):
     if not keyword:
         return {"error": "Keyword is required"}
 
+    target_folder = req.target_folder.strip() if req.target_folder else None
+    pool_name = target_folder or keyword
+
     job_id = str(uuid.uuid4())[:8]
-    db.create_job(job_id, keyword)
+    db.create_job(job_id, pool_name)
 
     background_tasks.add_task(
         execute_pipeline,
         job_id=job_id,
         keyword=keyword,
-        limit=req.limit
+        limit=req.limit,
+        target_folder=target_folder
     )
 
+    msg = f"Started crawler for '{keyword}' (saving into '{pool_name}')" if target_folder else f"Started crawler & AI analysis job for '{keyword}'"
     return {
         "job_id": job_id,
         "status": "started",
-        "keyword": keyword,
-        "message": f"Started crawler & AI analysis job for '{keyword}'"
+        "keyword": pool_name,
+        "message": msg
     }
 
 
@@ -241,6 +253,20 @@ def rename_folder_endpoint(name: str, req: RenameFolderRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/api/folders/merge")
+def merge_folder_endpoint(req: MergeFolderRequest):
+    """Merge source niche folder into target niche folder."""
+    src = req.source_folder.strip()
+    tgt = req.target_folder.strip()
+    if not src or not tgt:
+        raise HTTPException(status_code=400, detail="Source and Target folder names are required")
+    try:
+        res = db.merge_niche_folders(src, tgt)
+        return {"status": "success", "merged": res}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.get("/api/history")
 def get_history():
     """Get overall URL history & count."""
@@ -263,6 +289,26 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
     keyword = req.keyword.strip()
     if not keyword:
         raise HTTPException(status_code=400, detail="Keyword is required")
+
+    # Check if a comment crawl is already actively running to prevent machine overload
+    conn = db.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT job_id FROM crawl_jobs 
+    WHERE keyword = ? AND status in ('started', 'crawling') AND job_id LIKE 'batch_comments_%'
+    ORDER BY created_at DESC LIMIT 1
+    """, (keyword,))
+    active_row = cursor.fetchone()
+    conn.close()
+
+    if active_row:
+        existing_job_id = active_row["job_id"]
+        return {
+            "status": "started",
+            "job_id": existing_job_id,
+            "keyword": keyword,
+            "message": "Đang có tiến trình cào bình luận đang chạy..."
+        }
 
     job_id = f"batch_comments_{uuid.uuid4().hex[:8]}"
     db.create_job(job_id, keyword)
@@ -322,7 +368,7 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
             stat_comments = int(v.get("comments") or 50)
             max_limit = min(stat_comments, 1000) if req.crawl_all else req.max_comments_per_video
 
-            progress_pct = min(92, int(5 + ((idx + 1) / max(total_vids, 1)) * 85))
+            progress_pct = min(94, int(5 + ((idx + 1) / max(total_vids, 1)) * 89))
             db.update_job(
                 job_id, 
                 status="crawling", 
@@ -343,10 +389,7 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
                 total_new_crawled += new_added
                 total_fetched_session += len(cmts)
 
-        # Regenerate master holistic analysis & VoC Deep with the updated comments
-        db.update_job(job_id, status="crawling", progress=95, message=f"Đang cập nhật phân tích VoC Deep Consumer Psychology (+{total_new_crawled} cmt mới)...")
-        ai_engine.generate_master_holistic_analysis(keyword)
-        
+        # 1. Instantly complete job so UI finishes cleanly and displays new comments without freezing
         db.update_job(
             job_id, 
             status="completed", 
@@ -355,6 +398,12 @@ def crawl_top_comments_endpoint(req: CrawlTopCommentsRequest, background_tasks: 
             new_videos_count=total_new_crawled
         )
         print(f"[API] Batch comments crawl complete for '{keyword}': {total_new_crawled} brand new comments saved.")
+
+        # 2. Update Master Holistic AI Synthesis in background (non-blocking)
+        try:
+            ai_engine.generate_master_holistic_analysis(keyword)
+        except Exception as me:
+            print(f"[API] Master analysis background notice: {me}")
 
     background_tasks.add_task(run_batch_crawl)
 

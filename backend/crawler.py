@@ -177,19 +177,21 @@ def load_and_ensure_search_results(page, search_url: str, query_str: str, max_re
     return False
 
 
-def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
+def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=None):
     """
     Search TikTok using Multi-Vector Query Expansion, filter out existing URLs from DB history,
     collect target_count brand-new videos, fetch metadata, comments, score, and store to DB.
+    If target_folder is specified, saves all discovered videos under that niche folder name.
     """
+    pool_keyword = (target_folder or keyword).strip()
     if job_id:
-        db.update_job(job_id, status="crawling", progress=5, message=f"Loading history for '{keyword}'...")
+        db.update_job(job_id, status="crawling", progress=5, message=f"Loading history for '{pool_keyword}'...")
 
     existing_ids, existing_urls = db.get_existing_video_ids()
     print(f"[Crawler] Found {len(existing_ids)} existing videos in DB history.")
 
     query_vectors = generate_niche_search_queries(keyword)
-    print(f"[Crawler] Generated {len(query_vectors)} intelligent search vectors for niche '{keyword}': {query_vectors}")
+    print(f"[Crawler] Generated {len(query_vectors)} intelligent search vectors for '{keyword}' (Saving into folder '{pool_keyword}'): {query_vectors}")
 
     discovered_new_videos = {}  # vid -> video_record
     seen_in_session = set()
@@ -267,7 +269,7 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                     discovered_new_videos[vid] = {
                         "video_id": vid,
                         "url": clean_url,
-                        "keyword": keyword,  # All vectors pool under the parent niche keyword
+                        "keyword": pool_keyword,  # All vectors pool under the parent niche folder keyword
                         "creator": creator,
                         "creator_followers": creator_followers,
                         "caption": caption,

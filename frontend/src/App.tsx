@@ -323,6 +323,8 @@ function App() {
   const [newFolderDesc, setNewFolderDesc] = useState<string>("");
   const [creatingFolder, setCreatingFolder] = useState<boolean>(false);
   const [deletingFolderName, setDeletingFolderName] = useState<string | null>(null);
+  const [saveToActiveFolder, setSaveToActiveFolder] = useState<boolean>(true);
+  const [mergingFolder, setMergingFolder] = useState<boolean>(false);
 
   // Video-specific comment crawl state
   const [crawlingCommentVid, setCrawlingCommentVid] = useState<string | null>(null);
@@ -426,6 +428,30 @@ function App() {
     setKeyword(folderName);
     await loadData(folderName);
     setShowManageFoldersModal(false);
+  }
+
+  async function handleMergeFolder(sourceName: string, targetName: string) {
+    if (!sourceName || !targetName || sourceName === targetName) return;
+    if (!confirm(`Bạn có chắc chắn muốn gộp toàn bộ video và phân tích từ thư mục "${sourceName}" vào thư mục "${targetName}" không?\n\n(Tất cả video của "${sourceName}" sẽ được chuyển vào "${targetName}", và thư mục "${sourceName}" sẽ được dọn sạch).`)) {
+      return;
+    }
+    setMergingFolder(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/folders/merge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source_folder: sourceName, target_folder: targetName }),
+      });
+      if (res.ok) {
+        await loadFolders();
+        setKeyword(targetName);
+        await loadData(targetName);
+      }
+    } catch (e) {
+      console.error("Merge folder error:", e);
+    } finally {
+      setMergingFolder(false);
+    }
   }
 
   async function loadCreators(targetKeyword?: string) {
@@ -594,13 +620,17 @@ function App() {
   async function handleAnalyze() {
     if (!keyword.trim() || loading) return;
     setLoading(true);
-    setCurrentJob(null);
+    const effectiveFolder = saveToActiveFolder && data?.keyword ? data.keyword : keyword.trim();
 
     try {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim(), limit: crawlLimit }),
+        body: JSON.stringify({
+          keyword: keyword.trim(),
+          limit: crawlLimit,
+          target_folder: saveToActiveFolder && data?.keyword ? data.keyword : undefined,
+        }),
       });
 
       if (res.ok) {
@@ -608,7 +638,7 @@ function App() {
         const jobId = json.job_id;
         setCurrentJob({
           job_id: jobId,
-          keyword: keyword.trim(),
+          keyword: effectiveFolder,
           status: "started",
           progress: 5,
           message: `Kiểm tra lịch sử SQLite & cào ${crawlLimit} video mới (Multi-Vector)...`,
@@ -1245,6 +1275,36 @@ ${data.master_analysis.summary}\n`;
               )}
             </button>
           </div>
+
+          {/* Active Folder Target Row */}
+          {data?.keyword && (
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-2.5 px-1 text-xs">
+              <label className="flex items-center gap-2 text-violet-300 hover:text-white cursor-pointer select-none bg-slate-950/80 border border-slate-800 px-3.5 py-2 rounded-xl transition">
+                <input
+                  type="checkbox"
+                  checked={saveToActiveFolder}
+                  onChange={(e) => setSaveToActiveFolder(e.target.checked)}
+                  className="rounded bg-slate-900 border-slate-700 text-violet-600 focus:ring-0 cursor-pointer w-4 h-4"
+                />
+                <span>
+                  Lưu video tìm kiếm vào thư mục hiện tại: <strong className="text-white font-bold">📁 {data.keyword}</strong>
+                  {saveToActiveFolder ? (
+                    <span className="text-emerald-400 text-[11px] ml-1.5 font-medium">(Bật: Dùng từ khóa phụ/đồng nghĩa sẽ gom chung vào đây, không tách file mới)</span>
+                  ) : (
+                    <span className="text-amber-400 text-[11px] ml-1.5 font-medium">(Tắt: Sẽ tạo thư mục ngách riêng biệt mới)</span>
+                  )}
+                </span>
+              </label>
+
+              <button
+                onClick={() => setShowManageFoldersModal(true)}
+                className="text-slate-400 hover:text-violet-300 flex items-center gap-1.5 transition cursor-pointer text-xs font-semibold py-1"
+              >
+                <Folder size={13} className="text-amber-400" />
+                <span>Quản lý &amp; Gộp thư mục ({foldersList.length})</span>
+              </button>
+            </div>
+          )}
 
           {/* Action Row */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 mt-3 text-xs text-slate-400 px-1">
@@ -4579,12 +4639,22 @@ ${data.master_analysis.summary}\n`;
 
                       <div className="flex items-center gap-2 self-end sm:self-center">
                         {!isActive ? (
-                          <button
-                            onClick={() => handleSwitchFolder(f.name)}
-                            className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
-                          >
-                            Chuyển Sang
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleSwitchFolder(f.name)}
+                              className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-3 py-1.5 rounded-xl text-xs transition cursor-pointer"
+                            >
+                              Chuyển Sang
+                            </button>
+                            <button
+                              onClick={() => handleMergeFolder(f.name, keyword)}
+                              disabled={mergingFolder}
+                              className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 font-semibold px-2.5 py-1.5 rounded-xl text-xs transition cursor-pointer disabled:opacity-50"
+                              title={`Gộp toàn bộ video của "${f.name}" vào thư mục đang xem "${keyword}"`}
+                            >
+                              Gộp vào {keyword}
+                            </button>
+                          </>
                         ) : (
                           <span className="text-xs text-slate-500 font-medium px-2 py-1">Hiện tại</span>
                         )}
