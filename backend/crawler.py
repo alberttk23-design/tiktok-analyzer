@@ -261,7 +261,7 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                         "engagement_rate": eng_rate,
                         "score": score
                     }
-                    print(f"[Crawler Stream] Discovered NEW video #{len(discovered_new_videos)}: @{creator} ({views:,} views) - {vid}")
+                    print(f"[Crawler Stream] Discovered NEW video #{len(discovered_new_videos)} (Scanned: {len(seen_in_session)}): @{creator} ({views:,} views) - {vid}")
             except Exception as e:
                 print(f"[Crawler Stream] Notice parsing API packet: {e}")
 

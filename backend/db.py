@@ -540,6 +540,19 @@ def get_results_by_keyword(keyword=None):
             master_analysis["friction_solutions"] = []
 
     conn.close()
+
+    # Auto-backfill reviews for any videos that were interrupted or crawled without analysis
+    existing_reviewed_vids = {r.get("video_id") for r in reviews}
+    missing_vids = [v for v in videos if v.get("video_id") not in existing_reviewed_vids]
+    if missing_vids:
+        import backend.ai_engine as ai_engine
+        for v in missing_vids:
+            vid = v.get("video_id")
+            ins = insights_map.get(vid)
+            fb = ai_engine.build_fallback_review(v, keyword, comment_insight=ins)
+            save_review(fb)
+            reviews.append(fb)
+
     return {
         "keyword": keyword,
         "videos": videos,
