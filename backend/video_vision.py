@@ -222,12 +222,29 @@ def analyze_video_multimodal_full(video_url: str, video_id: str, caption: str = 
         vision_res = analyze_keyframes_with_qwen(keyframes, caption=caption)
         
         # Relative URLs or paths for keyframes so UI can show them
-        keyframe_urls = [f"/api/keyframe/{Path(p).name}" for p in keyframes]
-        
+        # Step 4: Refine sound type based on Whisper audio transcription
+        trans = audio_res.get("transcript", "").strip()
+        spoken = audio_res.get("spoken_hook", "")
+        caption_lower = caption.lower()
+
+        if "asmr" in caption_lower or "asmr" in trans.lower():
+            detected_stype = "asmr"
+        elif trans and len(trans) > 10 and not ("không có lời thoại" in spoken.lower() or "background music only" in spoken.lower()):
+            detected_stype = "voiceover"
+        else:
+            detected_stype = "music_only"
+
+        try:
+            from backend.db import update_video_sound
+            update_video_sound(video_id, detected_stype)
+        except Exception:
+            pass
+
         return {
             "transcript": audio_res.get("transcript", ""),
             "spoken_hook": audio_res.get("spoken_hook", ""),
             "language": audio_res.get("language", "en"),
+            "sound_type": detected_stype,
             "visual_hook": vision_res.get("visual_hook", ""),
             "setting": vision_res.get("setting", ""),
             "on_screen_text": vision_res.get("on_screen_text", ""),

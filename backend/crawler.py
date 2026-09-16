@@ -247,6 +247,23 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
 
                     eng_rate, score = calculate_viral_score(views, likes, comments, reposts, saves)
 
+                    # Sound & Music Intelligence
+                    music_obj = item.get("music") or item.get("musicItem") or {}
+                    sound_title = str(music_obj.get("title") or "").strip()
+                    sound_author = str(music_obj.get("authorName") or "").strip()
+                    sound_id = str(music_obj.get("id") or "")
+                    sound_original = 1 if bool(music_obj.get("original", False)) else 0
+
+                    caption_lower = caption.lower()
+                    if "asmr" in caption_lower or "asmr" in sound_title.lower():
+                        sound_type = "asmr"
+                    elif sound_original:
+                        sound_type = "voiceover"
+                    elif sound_title:
+                        sound_type = "voice_with_music" if duration >= 15 else "music_only"
+                    else:
+                        sound_type = "unknown"
+
                     discovered_new_videos[vid] = {
                         "video_id": vid,
                         "url": clean_url,
@@ -262,7 +279,12 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                         "reposts": reposts,
                         "saves": saves,
                         "engagement_rate": eng_rate,
-                        "score": score
+                        "score": score,
+                        "sound_title": sound_title,
+                        "sound_author": sound_author,
+                        "sound_original": sound_original,
+                        "sound_type": sound_type,
+                        "sound_id": sound_id
                     }
                     print(f"[Crawler Stream] Discovered NEW video #{len(discovered_new_videos)} (Scanned: {len(seen_in_session)}): @{creator} ({views:,} views) - {vid}")
             except Exception as e:

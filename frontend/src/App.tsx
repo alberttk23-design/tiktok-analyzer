@@ -46,6 +46,9 @@ import {
   FolderPlus,
   Folder,
   Trash2,
+  Music,
+  Headphones,
+  Volume2,
 } from "lucide-react";
 
 interface NicheFolder {
@@ -75,6 +78,11 @@ interface VideoItem {
   engagement_rate: number;
   score: number;
   creator_followers?: number;
+  sound_title?: string;
+  sound_author?: string;
+  sound_original?: boolean | number;
+  sound_type?: string;
+  sound_id?: string;
 }
 
 interface ReviewItem {
@@ -122,6 +130,31 @@ interface MasterAnalysis {
   buying_desires?: { username: string; text: string; likes: number }[];
   top_objections?: { username: string; text: string; likes: number }[];
   voc_summary?: string;
+  audio_strategy?: {
+    dominant_style?: string;
+    winning_audio_formula?: string;
+    recommendation?: string;
+    distribution?: {
+      sound_type: string;
+      label: string;
+      count: number;
+      percentage: number;
+      total_views: number;
+      avg_views: number;
+      avg_saves: number;
+      avg_score: number;
+    }[];
+    top_sounds?: {
+      sound_title: string;
+      sound_author: string;
+      sound_original: number;
+      sound_type: string;
+      usage_count: number;
+      total_views: number;
+      avg_score: number;
+      max_views: number;
+    }[];
+  };
 }
 
 interface ConceptItem {
@@ -225,6 +258,29 @@ function App() {
     comment_insights?: Record<string, CommentInsight>;
     master_analysis?: MasterAnalysis;
     master_analyses?: Record<string, MasterAnalysis>;
+    audio_summary?: {
+      total_analyzed: number;
+      distribution: {
+        sound_type: string;
+        label: string;
+        count: number;
+        percentage: number;
+        total_views: number;
+        avg_views: number;
+        avg_saves: number;
+        avg_score: number;
+      }[];
+      top_sounds: {
+        sound_title: string;
+        sound_author: string;
+        sound_original: number;
+        sound_type: string;
+        usage_count: number;
+        total_views: number;
+        avg_score: number;
+        max_views: number;
+      }[];
+    };
   } | null>(null);
 
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
@@ -239,6 +295,7 @@ function App() {
   const [geminiApiKey, setGeminiApiKey] = useState<string>(() => localStorage.getItem("gemini_api_key") || "");
   const [showApiKeyModal, setShowApiKeyModal] = useState<boolean>(false);
   const [crawlLimit, setCrawlLimit] = useState<number>(20);
+  const [soundTypeFilter, setSoundTypeFilter] = useState<string>("all");
 
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
@@ -800,6 +857,57 @@ ${data.master_analysis.summary}\n`;
     );
   }
 
+  function renderSoundBadge(soundType?: string, soundTitle?: string, soundAuthor?: string) {
+    const stype = soundType || "unknown";
+    let badge = (
+      <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-slate-800 text-slate-300 border-slate-700 flex items-center gap-1">
+        <Music size={10} />
+        <span>Âm thanh</span>
+      </span>
+    );
+
+    if (stype === "voiceover") {
+      badge = (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-sky-950/90 text-sky-300 border-sky-600/60 flex items-center gap-1 shadow-sm">
+          <Mic size={10} className="text-sky-400" />
+          <span>🎙️ Voiceover</span>
+        </span>
+      );
+    } else if (stype === "voice_with_music") {
+      badge = (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-purple-950/90 text-purple-300 border-purple-600/60 flex items-center gap-1 shadow-sm">
+          <Headphones size={10} className="text-purple-400" />
+          <span>🎧 Voice + BGM</span>
+        </span>
+      );
+    } else if (stype === "music_only") {
+      badge = (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-pink-950/90 text-pink-300 border-pink-600/60 flex items-center gap-1 shadow-sm">
+          <Music size={10} className="text-pink-400" />
+          <span>🎵 Nhạc Trend</span>
+        </span>
+      );
+    } else if (stype === "asmr") {
+      badge = (
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-950/90 text-emerald-300 border-emerald-600/60 flex items-center gap-1 shadow-sm">
+          <Volume2 size={10} className="text-emerald-400" />
+          <span>🤫 ASMR</span>
+        </span>
+      );
+    }
+
+    if (!soundTitle) return badge;
+
+    return (
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {badge}
+        <span className="text-[10px] text-slate-300 truncate max-w-[170px] font-medium" title={`${soundTitle}${soundAuthor ? ` by @${soundAuthor}` : ''}`}>
+          {soundTitle}
+        </span>
+      </div>
+    );
+  }
+
   const reviewMap = new Map<string, ReviewItem>();
   if (data?.reviews) {
     data.reviews.forEach((r) => {
@@ -827,12 +935,18 @@ ${data.master_analysis.summary}\n`;
       list = list.filter(
         (v) =>
           (v.creator && v.creator.toLowerCase().includes(q)) ||
-          (v.caption && v.caption.toLowerCase().includes(q))
+          (v.caption && v.caption.toLowerCase().includes(q)) ||
+          (v.sound_title && v.sound_title.toLowerCase().includes(q)) ||
+          (v.sound_author && v.sound_author.toLowerCase().includes(q))
       );
     }
 
     if (minViewsFilter > 0) {
       list = list.filter((v) => (v.views || 0) >= minViewsFilter);
+    }
+
+    if (soundTypeFilter !== "all") {
+      list = list.filter((v) => v.sound_type === soundTypeFilter);
     }
 
     list.sort((a, b) => {
@@ -1599,6 +1713,111 @@ ${data.master_analysis.summary}\n`;
                   </div>
                 </div>
 
+                {/* Audio Intelligence & Sound Strategy Section */}
+                <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                        <Music size={16} />
+                        <span>Chiến Lược Âm Thanh & Nhạc Nền (Sound & Audio Intelligence)</span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Phân bổ tỷ trọng Giọng nói (Voiceover) vs Nhạc Trend (BGM) &bull; Top Sound viral nhất trong ngách
+                      </p>
+                    </div>
+                    {data?.audio_summary && (
+                      <span className="text-xs font-mono px-3 py-1 bg-slate-950 text-slate-300 rounded-xl border border-slate-800">
+                        {data.audio_summary.total_analyzed} videos phân tích âm thanh
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 4 Sound Distribution Cards */}
+                  {data?.audio_summary?.distribution && data.audio_summary.distribution.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {data.audio_summary.distribution.map((d: any, idx: number) => {
+                        let icon = <Mic size={14} className="text-sky-400" />;
+                        let colorClass = "from-sky-950/60 to-slate-900 border-sky-800/60 text-sky-300";
+                        if (d.sound_type === "voice_with_music") {
+                          icon = <Headphones size={14} className="text-purple-400" />;
+                          colorClass = "from-purple-950/60 to-slate-900 border-purple-800/60 text-purple-300";
+                        } else if (d.sound_type === "music_only") {
+                          icon = <Music size={14} className="text-pink-400" />;
+                          colorClass = "from-pink-950/60 to-slate-900 border-pink-800/60 text-pink-300";
+                        } else if (d.sound_type === "asmr") {
+                          icon = <Volume2 size={14} className="text-emerald-400" />;
+                          colorClass = "from-emerald-950/60 to-slate-900 border-emerald-800/60 text-emerald-300";
+                        }
+
+                        return (
+                          <div key={idx} className={`bg-gradient-to-br ${colorClass} p-3.5 rounded-2xl border`}>
+                            <div className="flex items-center justify-between text-xs mb-1">
+                              <span className="font-semibold flex items-center gap-1.5">{icon} {d.label.split('(')[0]}</span>
+                              <span className="font-bold font-mono">{d.percentage}%</span>
+                            </div>
+                            <div className="text-lg font-bold text-white font-mono">{d.count} vids</div>
+                            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
+                              <span>{(d.total_views || 0).toLocaleString()} views</span>
+                              <span className="text-amber-300 font-mono">avg {d.avg_saves} saves</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Audio Insights & Winning Formula */}
+                  <div className="grid md:grid-cols-2 gap-4 pt-1">
+                    {/* Winning Audio Formula */}
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+                      <div className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles size={14} />
+                        <span>Công Thức Âm Thanh Thắng Cuộc (Winning Audio Formula)</span>
+                      </div>
+                      <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                        {masterAI.audio_strategy?.winning_audio_formula ||
+                          "3 giây đầu dùng Spoken Hook dứt khoát ('Chiếc cây giả cứu rỗi căn phòng...') kết hợp âm thanh thao tác (Foley unboxing/uốn cành). Từ giây 4 trở đi, lồng nhạc nền chill/lofi không lời để giữ chân và kích thích chốt đơn."}
+                      </p>
+                      {masterAI.audio_strategy?.recommendation && (
+                        <div className="text-xs text-amber-300/90 bg-amber-950/30 p-2.5 rounded-xl border border-amber-800/40 mt-2">
+                          💡 <strong>Lời khuyên sản xuất:</strong> {masterAI.audio_strategy.recommendation}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Top Trending Sounds in Niche */}
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+                      <div className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <Flame size={14} />
+                        <span>Top Bài Nhạc / Sound Được Dùng Nhiều Nhất</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        {(data?.audio_summary?.top_sounds || masterAI.audio_strategy?.top_sounds || []).slice(0, 4).map((s: any, sIdx: number) => (
+                          <div key={sIdx} className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 truncate max-w-[240px]">
+                              <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-pink-400">
+                                #{sIdx + 1}
+                              </span>
+                              <div className="truncate">
+                                <p className="font-semibold text-white truncate" title={s.sound_title}>
+                                  {s.sound_title}
+                                </p>
+                                {s.sound_author && (
+                                  <p className="text-[10px] text-slate-500 truncate">@{s.sound_author}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-[11px] font-mono text-purple-300 font-semibold">{s.usage_count} videos</span>
+                              <p className="text-[10px] text-slate-500 font-mono">{(s.total_views || 0).toLocaleString()} views</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Winning Blueprint */}
                 <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl">
                   <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-3">
@@ -1810,6 +2029,7 @@ ${data.master_analysis.summary}\n`;
                             <span>Score: {vid.score || 75}</span>
                           </div>
                           {renderAdAngleBadge(rev?.ad_angle)}
+                          {renderSoundBadge(vid.sound_type, vid.sound_title, vid.sound_author)}
                         </div>
                       </div>
 
@@ -1895,6 +2115,20 @@ ${data.master_analysis.summary}\n`;
                             )}
 
                             <div className={rev?.keyframes && rev.keyframes.length > 0 ? "md:col-span-8 space-y-2" : "md:col-span-12 space-y-2"}>
+                              {(vid.sound_title || vid.sound_type) && (
+                                <p className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap">
+                                  <strong className="text-pink-400 font-semibold flex items-center gap-1">
+                                    <Music size={11} /> Nhạc / Âm thanh:
+                                  </strong>
+                                  {renderSoundBadge(vid.sound_type)}
+                                  {vid.sound_title && (
+                                    <span className="text-slate-200 font-medium">"{vid.sound_title}"</span>
+                                  )}
+                                  {vid.sound_author && (
+                                    <span className="text-slate-500 text-[11px]">bởi @{vid.sound_author}</span>
+                                  )}
+                                </p>
+                              )}
                               {rev?.spoken_hook && (
                                 <p className="text-xs text-slate-300">
                                   <strong className="text-pink-400 font-semibold">🎙️ Lời thoại mở đầu (0-3s): </strong>
@@ -2330,43 +2564,71 @@ ${data.master_analysis.summary}\n`;
             </div>
 
             {/* Filter Toolbar for Database */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-950 p-3 rounded-2xl border border-slate-800/80 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 font-semibold flex items-center gap-1">
-                  <Filter size={13} className="text-violet-400" /> Lọc nhanh Views:
-                </span>
-                {[
-                  { label: "Tất cả", val: 0 },
-                  { label: ">50K", val: 50000 },
-                  { label: ">100K", val: 100000 },
-                  { label: ">500K", val: 500000 },
-                  { label: ">1M", val: 1000000 },
-                ].map((f) => (
-                  <button
-                    key={f.val}
-                    onClick={() => setMinViewsFilter(f.val)}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-medium ${
-                      minViewsFilter === f.val
-                        ? "bg-purple-600 text-white font-bold shadow"
-                        : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+            <div className="flex flex-col gap-2.5 bg-slate-950 p-3.5 rounded-2xl border border-slate-800/80 text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-slate-400 font-semibold flex items-center gap-1">
+                    <Filter size={13} className="text-violet-400" /> Lọc nhanh Views:
+                  </span>
+                  {[
+                    { label: "Tất cả", val: 0 },
+                    { label: ">50K", val: 50000 },
+                    { label: ">100K", val: 100000 },
+                    { label: ">500K", val: 500000 },
+                    { label: ">1M", val: 1000000 },
+                  ].map((f) => (
+                    <button
+                      key={f.val}
+                      onClick={() => setMinViewsFilter(f.val)}
+                      className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-medium ${
+                        minViewsFilter === f.val
+                          ? "bg-purple-600 text-white font-bold shadow"
+                          : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      placeholder="Tìm creator / caption / sound..."
+                      value={tableSearch}
+                      onChange={(e) => setTableSearch(e.target.value)}
+                      className="bg-slate-900 border border-slate-800 rounded-xl pl-7 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 w-56"
+                    />
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Tìm creator / caption..."
-                    value={tableSearch}
-                    onChange={(e) => setTableSearch(e.target.value)}
-                    className="bg-slate-900 border border-slate-800 rounded-xl pl-7 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 w-52"
-                  />
-                </div>
+              {/* Sound Type Filter Pills */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-900">
+                <span className="text-slate-400 font-semibold flex items-center gap-1 mr-1">
+                  <Music size={12} className="text-pink-400" /> Loại Âm Thanh:
+                </span>
+                {[
+                  { id: "all", label: "Tất cả âm thanh" },
+                  { id: "voiceover", label: "🎙️ Voiceover" },
+                  { id: "voice_with_music", label: "🎧 Voice + BGM" },
+                  { id: "music_only", label: "🎵 Nhạc Trend" },
+                  { id: "asmr", label: "🤫 ASMR" },
+                ].map((st) => (
+                  <button
+                    key={st.id}
+                    onClick={() => setSoundTypeFilter(st.id)}
+                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer font-medium text-[11px] ${
+                      soundTypeFilter === st.id
+                        ? "bg-pink-600 text-white font-bold shadow"
+                        : "bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800"
+                    }`}
+                  >
+                    {st.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -2443,6 +2705,7 @@ ${data.master_analysis.summary}\n`;
                         )}
                       </div>
                     </th>
+                    <th className="py-3 px-3 min-w-[200px]">Âm Thanh & Nhạc</th>
                     <th className="py-3 px-3 min-w-[280px]">AI Phân Tích Tổng Thể (Local)</th>
                     <th className="py-3 px-3">Link</th>
                   </tr>
@@ -2479,6 +2742,9 @@ ${data.master_analysis.summary}\n`;
                         <td className="py-3 px-3 font-mono">{(v.saves || 0).toLocaleString()}</td>
                         <td className="py-3 px-3 font-mono">{(v.comments || 0).toLocaleString()}</td>
                         <td className="py-3 px-3 font-bold text-emerald-400">{v.score}</td>
+                        <td className="py-3 px-3">
+                          {renderSoundBadge(v.sound_type, v.sound_title, v.sound_author)}
+                        </td>
                         <td className="py-3 px-3 text-slate-300">
                           <div className="bg-slate-950 p-2 rounded-xl border border-slate-800 text-[11px] leading-relaxed line-clamp-2">
                             {rev?.winning_formula ? (

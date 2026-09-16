@@ -174,6 +174,13 @@ def get_master_analysis_endpoint(keyword: Optional[str] = Query(None), engine: O
     return res.get("master_analysis") or {}
 
 
+@app.get("/api/audio-summary")
+def get_audio_summary_endpoint(keyword: Optional[str] = Query(None)):
+    """Get aggregated audio intelligence (sound type distribution, top sounds) for a keyword/niche."""
+    kw = keyword or db.get_latest_keyword()
+    return db.get_niche_audio_summary(kw)
+
+
 @app.get("/api/keywords")
 def get_keywords():
     """List all previously analyzed keywords and video counts."""
