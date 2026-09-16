@@ -1040,70 +1040,175 @@ def get_results_by_keyword(keyword=None):
 def get_caption_analytics(keyword: str) -> dict:
     """
     Analyze all video captions for a keyword:
-    - Extract top hashtags & frequencies
+    - Extract top hashtags & frequencies & view performance
     - Calculate co-occurring hashtag pairs (which tags creators post together)
     - Extract top recurring multi-word phrases (SEO keywords)
+    - Caption length stats (chars, words, tags)
+    - CTA & question rates
+    - Caption styles breakdown
+    - Top winning caption templates
     """
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT caption, views, likes, saves FROM videos WHERE keyword = ?", (keyword,))
+    cursor.execute("""
+        SELECT caption, views, likes, saves, score, creator, url 
+        FROM videos 
+        WHERE keyword = ?
+        ORDER BY score DESC
+    """, (keyword,))
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        return {"top_hashtags": [], "top_pairs": [], "top_phrases": [], "avg_tags": 0, "total_videos": 0}
+        return {
+            "top_hashtags": [],
+            "top_pairs": [],
+            "top_phrases": [],
+            "avg_tags": 0,
+            "avg_chars": 0,
+            "avg_words": 0,
+            "cta_rate": 0,
+            "question_rate": 0,
+            "styles": {},
+            "top_templates": [],
+            "total_videos": 0
+        }
 
     import re
-    from collections import Counter
+    from collections import Counter, defaultdict
 
+    total_vids = len(rows)
     tag_counts = Counter()
+    tag_views = defaultdict(int)
     co_occur = Counter()
     phrase_counts = Counter()
-    total_tags_count = 0
+    phrase_views = defaultdict(int)
 
-    stop_words = {"the", "and", "a", "an", "in", "on", "at", "to", "for", "of", "with", "is", "this", "my", "your", "it", "so", "i", "you", "that", "are", "from"}
+    total_chars = 0
+    total_words = 0
+    total_tags = 0
+    has_cta = 0
+    has_question = 0
+    style_counts = Counter()
+    cta_signals = ["link", "bio", "amazon", "shop", "storefront", "comment", "order", "finds", "check", "mua", "inbox"]
+    stop_words = {"the", "and", "a", "an", "in", "on", "at", "to", "for", "of", "with", "is", "this", "my", "your", "it", "so", "i", "you", "that", "are", "from", "was", "be", "have", "has", "but", "not"}
+
+    templates = []
 
     for r in rows:
         cap = (r["caption"] or "").strip()
-        if not cap:
-            continue
+        views = r["views"] or 0
+        saves = r["saves"] or 0
+        total_chars += len(cap)
 
-        # Extract hashtags
+        words_in_cap = re.findall(r"\b\w+\b", cap)
+        total_words += len(words_in_cap)
+
         raw_tags = re.findall(r"#[a-zA-Z0-9_\-]+", cap.lower())
         unique_tags = list(set(raw_tags))
-        total_tags_count += len(unique_tags)
+        total_tags += len(unique_tags)
 
         for t in unique_tags:
             tag_counts[t] += 1
+            tag_views[t] += views
 
-        # Co-occurring pairs
         for i in range(len(unique_tags)):
             for j in range(i + 1, len(unique_tags)):
                 pair = tuple(sorted([unique_tags[i], unique_tags[j]]))
                 co_occur[pair] += 1
 
-        # Extract clean text phrases (strip hashtags and URLs)
         clean_text = re.sub(r"https?://\S+", "", cap)
         clean_text = re.sub(r"#[a-zA-Z0-9_\-]+", "", clean_text)
-        clean_text = re.sub(r"@[a-zA-Z0-9_\-.]+", "", clean_text).lower()
-        words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_text) if w not in stop_words]
+        clean_text = re.sub(r"@[a-zA-Z0-9_\-.]+", "", clean_text).strip()
 
-        # 2-word n-grams
-        for k in range(len(words) - 1):
-            phrase = f"{words[k]} {words[k+1]}"
-            phrase_counts[phrase] += 1
+        if any(sig in cap.lower() for sig in cta_signals):
+            has_cta += 1
+        if "?" in cap:
+            has_question += 1
 
-    total_vids = len(rows)
-    top_hashtags = [{"tag": tag, "count": count, "percentage": round((count / total_vids) * 100, 1)} for tag, count in tag_counts.most_common(15)]
-    top_pairs = [{"pair": f"{p[0]} + {p[1]}", "tag1": p[0], "tag2": p[1], "count": count, "percentage": round((count / total_vids) * 100, 1)} for p, count in co_occur.most_common(12)]
-    top_phrases = [{"phrase": phr, "count": count} for phr, count in phrase_counts.most_common(10) if count >= 2]
-    avg_tags = round(total_tags_count / max(total_vids, 1), 1)
+        clean_len = len(clean_text)
+        if clean_len == 0 and len(raw_tags) > 0:
+            style_counts["hashtag_only"] += 1
+        elif clean_len > 120:
+            style_counts["storytelling"] += 1
+        elif any(s in clean_text.lower() for s in ["deal", "sale", "price", "amazon", "cost", "cheap", "affordable", "giá"]):
+            style_counts["deal_promotional"] += 1
+        else:
+            style_counts["short_minimal"] += 1
+
+        clean_words = [w for w in re.findall(r"\b[a-zA-Z]{3,}\b", clean_text.lower()) if w not in stop_words]
+        for k in range(len(clean_words) - 1):
+            phr = f"{clean_words[k]} {clean_words[k+1]}"
+            phrase_counts[phr] += 1
+            phrase_views[phr] += views
+
+        if len(templates) < 3 and len(clean_text) > 35 and views > 80000:
+            templates.append({
+                "creator": r["creator"],
+                "clean_text": clean_text[:180],
+                "tags": unique_tags[:6],
+                "views": views,
+                "saves": saves
+            })
+
+    top_hashtags = [
+        {
+            "tag": tag,
+            "count": count,
+            "percentage": round((count / total_vids) * 100, 1),
+            "total_views": tag_views[tag],
+            "avg_views": tag_views[tag] // count if count > 0 else 0
+        }
+        for tag, count in tag_counts.most_common(15)
+    ]
+    top_pairs = [
+        {
+            "pair": f"{p[0]} + {p[1]}",
+            "tag1": p[0],
+            "tag2": p[1],
+            "count": count,
+            "percentage": round((count / total_vids) * 100, 1)
+        }
+        for p, count in co_occur.most_common(12)
+    ]
+    top_phrases = [
+        {
+            "phrase": phr,
+            "count": count,
+            "total_views": phrase_views[phr],
+            "avg_views": phrase_views[phr] // count if count > 0 else 0
+        }
+        for phr, count in phrase_counts.most_common(10) if count >= 2
+    ]
 
     return {
         "top_hashtags": top_hashtags,
         "top_pairs": top_pairs,
         "top_phrases": top_phrases,
-        "avg_tags": avg_tags,
+        "avg_tags": round(total_tags / max(total_vids, 1), 1),
+        "avg_chars": round(total_chars / max(total_vids, 1), 1),
+        "avg_words": round(total_words / max(total_vids, 1), 1),
+        "cta_rate": round((has_cta / max(total_vids, 1)) * 100, 1),
+        "question_rate": round((has_question / max(total_vids, 1)) * 100, 1),
+        "styles": {
+            "storytelling": {
+                "count": style_counts["storytelling"],
+                "percentage": round((style_counts["storytelling"] / max(total_vids, 1)) * 100, 1)
+            },
+            "short_minimal": {
+                "count": style_counts["short_minimal"],
+                "percentage": round((style_counts["short_minimal"] / max(total_vids, 1)) * 100, 1)
+            },
+            "deal_promotional": {
+                "count": style_counts["deal_promotional"],
+                "percentage": round((style_counts["deal_promotional"] / max(total_vids, 1)) * 100, 1)
+            },
+            "hashtag_only": {
+                "count": style_counts["hashtag_only"],
+                "percentage": round((style_counts["hashtag_only"] / max(total_vids, 1)) * 100, 1)
+            }
+        },
+        "top_templates": templates,
         "total_videos": total_vids
     }
 

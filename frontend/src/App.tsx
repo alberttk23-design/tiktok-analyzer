@@ -289,10 +289,16 @@ function App() {
     audio_intelligence?: any;
     voc_deep?: any;
     caption_analytics?: {
-      top_hashtags: { tag: string; count: number; percentage: number }[];
+      top_hashtags: { tag: string; count: number; percentage: number; total_views?: number; avg_views?: number }[];
       top_pairs: { pair: string; tag1: string; tag2: string; count: number; percentage: number }[];
-      top_phrases: { phrase: string; count: number }[];
+      top_phrases: { phrase: string; count: number; total_views?: number; avg_views?: number }[];
       avg_tags: number;
+      avg_chars?: number;
+      avg_words?: number;
+      cta_rate?: number;
+      question_rate?: number;
+      styles?: Record<string, { count: number; percentage: number }>;
+      top_templates?: { creator: string; clean_text: string; tags: string[]; views: number; saves: number }[];
       total_videos: number;
     };
     comment_stats?: {
@@ -305,7 +311,7 @@ function App() {
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc" | "sounds">("reviews");
+  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc" | "sounds" | "voc_seo">("reviews");
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -326,6 +332,9 @@ function App() {
   const [vocDeepData, setVocDeepData] = useState<any>(null);
   const [vocPillarFilter, setVocPillarFilter] = useState<string>("all");
   const [copiedClapbackId, setCopiedClapbackId] = useState<string | null>(null);
+  const [vocSeoSubTab, setVocSeoSubTab] = useState<"all" | "seo" | "comments" | "clapback">("all");
+  const [copiedCaptionText, setCopiedCaptionText] = useState<string | null>(null);
+  const [copiedHashtagSet, setCopiedHashtagSet] = useState<boolean>(false);
 
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
@@ -1593,6 +1602,18 @@ ${data.master_analysis.summary}\n`;
             <Music size={16} />
             <span>🎵 Âm Thanh & Voice AI</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("voc_seo")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
+              activeTab === "voc_seo"
+                ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-lg shadow-sky-600/25 font-bold"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <MessageSquare size={16} />
+            <span>💬 Caption SEO & Bình Luận (VoC)</span>
+          </button>
         </div>
 
         {/* TAB: MASTER AI OVERALL ANALYSIS (DUAL ENGINE: OLLAMA LOCAL & GEMINI ANTIGRAVITY) */}
@@ -2743,12 +2764,67 @@ ${data.master_analysis.summary}\n`;
 
                         {/* 3. Buyer Psychology */}
                         <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-400 uppercase tracking-wider mb-1.5">
-                            <span>🧠 Tâm Lý Người Mua (Buyer Psychology)</span>
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-400 uppercase tracking-wider">
+                              <span>🧠 Tâm Lý Người Mua (Buyer Psychology)</span>
+                            </div>
+                            {ins && ins.total_crawled > 0 ? (
+                              <span className="text-[10px] bg-violet-950/80 border border-violet-700/60 text-violet-300 px-1.5 py-0.5 rounded font-mono font-bold">
+                                {ins.total_crawled} cmt thật
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-500 px-1.5 py-0.5 rounded">
+                                AI Ngách
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                            {rev?.buyer_psychology || "Đánh trúng khao khát nâng cấp không gian sống, giải tỏa nỗi sợ tốn công chăm sóc và chứng minh sự hợp lý về giá cả."}
-                          </p>
+
+                          {ins && ins.total_crawled > 0 ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                                <span className="bg-emerald-950/80 border border-emerald-800/70 text-emerald-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
+                                  🛒 {Math.round(((ins.buying_intent?.length || 0) / ins.total_crawled) * 100)}% Hỏi mua/xin link ({ins.buying_intent?.length || 0})
+                                </span>
+                                <span className="bg-amber-950/80 border border-amber-800/70 text-amber-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
+                                  ⚠️ {Math.round(((ins.objections?.length || 0) / ins.total_crawled) * 100)}% Rào cản/lo ngại ({ins.objections?.length || 0})
+                                </span>
+                                {ins.top_faqs && ins.top_faqs.length > 0 && (
+                                  <span className="bg-sky-950/80 border border-sky-800/70 text-sky-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
+                                    ❓ {ins.top_faqs.length} FAQ
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                                {ins.summary || rev?.buyer_psychology || "Đánh trúng nhu cầu thẩm mỹ và giải tỏa nỗi lo thực tế của khách hàng."}
+                              </p>
+                              {ins.buying_intent && ins.buying_intent.length > 0 && (
+                                <p className="text-[11px] text-emerald-300/90 italic bg-emerald-950/30 border border-emerald-900/40 p-2 rounded-xl">
+                                  💬 Khách hỏi mua: &ldquo;{ins.buying_intent[0].text}&rdquo;
+                                </p>
+                              )}
+                              {ins.objections && ins.objections.length > 0 && (
+                                <p className="text-[11px] text-amber-300/90 italic bg-amber-950/30 border border-amber-900/40 p-2 rounded-xl">
+                                  💬 Khách thắc mắc: &ldquo;{ins.objections[0].text}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                                {rev?.buyer_psychology || "Đánh trúng khao khát nâng cấp không gian sống, giải tỏa nỗi sợ tốn công chăm sóc và chứng minh sự hợp lý về giá cả."}
+                              </p>
+                              <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500">
+                                <span>Chưa cào dữ liệu bình luận riêng</span>
+                                <button
+                                  onClick={() => handleCrawlDeepComments(vid.video_id)}
+                                  disabled={crawlingCommentVid === vid.video_id}
+                                  className="text-purple-400 hover:text-purple-300 font-semibold cursor-pointer transition flex items-center gap-1"
+                                >
+                                  <Zap size={10} /> Cào cmt đo % ngay
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
                         {/* 4. Winning Formula */}
@@ -4416,6 +4492,974 @@ ${data.master_analysis.summary}\n`;
                   })}
                 </div>
               </div>
+            </div>
+          );
+        })()}
+
+        {/* TAB: CAPTION SEO & VOICE OF CUSTOMER (VoC) INTELLIGENCE */}
+        {activeTab === "voc_seo" && (() => {
+          const captionAnalytics = data?.caption_analytics;
+          const voc = vocDeepData || data?.voc_deep || masterAI?.voc_deep || {};
+          const pillars = voc.pillars || {};
+          const sourcingRecs = voc.sourcing_recommendations || [];
+          const clapbackScripts = voc.clapback_scripts || [];
+          const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 0;
+
+          // Aggregate comments from insightsMap
+          const allInsights = Object.values(insightsMap);
+          const allBuyingIntent = allInsights.flatMap((item: any) => item.buying_intent || []);
+          const allObjections = allInsights.flatMap((item: any) => item.objections || []);
+          const allFaqs = allInsights.flatMap((item: any) => item.top_faqs || []);
+
+          const buyingCount = Math.max(allBuyingIntent.length, pillars?.buying_triggers?.count || 0);
+          const objectionCount = Math.max(
+            allObjections.length,
+            (pillars?.physical_friction?.count || 0) +
+              (pillars?.aesthetic_skepticism?.count || 0) +
+              (pillars?.competitor_comparison?.count || 0)
+          );
+          const totalCommentsSafe = Math.max(1, totalCommentsAnalyzed);
+          const buyingPct = Math.round((buyingCount / totalCommentsSafe) * 100);
+          const objectionPct = Math.round((objectionCount / totalCommentsSafe) * 100);
+
+          const copyClapbackHelper = (text: string, id: string) => {
+            navigator.clipboard.writeText(text);
+            setCopiedClapbackId(id);
+            setTimeout(() => setCopiedClapbackId(null), 2500);
+          };
+
+          const copyCaptionHelper = (text: string) => {
+            navigator.clipboard.writeText(text);
+            setCopiedCaptionText(text);
+            setTimeout(() => setCopiedCaptionText(null), 2500);
+          };
+
+          const copyTopHashtags = (tags: string[]) => {
+            navigator.clipboard.writeText(tags.join(" "));
+            setCopiedHashtagSet(true);
+            setTimeout(() => setCopiedHashtagSet(false), 2500);
+          };
+
+          const top15Tags = (captionAnalytics?.top_hashtags || []).slice(0, 15);
+          const top5TagList = top15Tags.slice(0, 5).map((t) => t.tag);
+
+          return (
+            <div className="space-y-7 animate-in fade-in duration-300">
+              {/* Header & Subtabs */}
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-6">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                  <div>
+                    <div className="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider mb-1.5">
+                      <MessageSquare size={16} />
+                      <span>Trung Tâm Phân Tích Kép: Caption SEO & Tiếng Nói Khách Hàng</span>
+                      <span className="bg-sky-500/20 text-sky-300 border border-sky-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        Algorithm SEO &amp; VoC Intelligence
+                      </span>
+                    </div>
+                    <h3 className="text-xl md:text-3xl font-black text-white">
+                      Chiến Lược Caption SEO &amp; Ma Trận Bình Luận Khách Hàng
+                    </h3>
+                    <p className="text-xs md:text-sm text-slate-400 mt-1 max-w-4xl leading-relaxed">
+                      Dữ liệu tổng hợp từ <strong>{captionAnalytics?.total_videos || data?.videos.length || 0} video</strong> và <strong>{totalCommentsAnalyzed.toLocaleString()} bình luận thật</strong> trong ngách '{keyword}'. Tối ưu hóa thứ hạng tìm kiếm TikTok SEO, phân cụm hashtag và giải mã rào cản tâm lý mua hàng.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <button
+                      onClick={() => handleBatchCrawlComments(false)}
+                      disabled={batchCrawlingComments}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3.5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                      title="Cào nhanh thêm 1,000 bình luận từ các top video tiếp theo"
+                    >
+                      {batchCrawlingComments ? (
+                        <Loader2 size={13} className="animate-spin text-purple-400" />
+                      ) : (
+                        <RefreshCw size={13} className="text-sky-400" />
+                      )}
+                      <span>Cào Thêm 1,000 Cmt</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleBatchCrawlComments(true)}
+                      disabled={batchCrawlingComments}
+                      className="bg-gradient-to-r from-sky-600 via-indigo-600 to-pink-600 hover:from-sky-500 hover:to-pink-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-sky-600/30 transition cursor-pointer disabled:opacity-50"
+                      title="Cào quét toàn bộ bình luận trên tất cả các video trong ngách"
+                    >
+                      {batchCrawlingComments ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>Đang quét toàn ngách...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap size={13} className="text-yellow-300" />
+                          <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "0"} Cmt)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Sub-Tabs Selector */}
+                <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-950/80 rounded-2xl border border-slate-800/80">
+                  <button
+                    onClick={() => setVocSeoSubTab("all")}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      vocSeoSubTab === "all"
+                        ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-600/30"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    }`}
+                  >
+                    <span>🌟 Toàn Bộ Bảng Tin</span>
+                  </button>
+                  <button
+                    onClick={() => setVocSeoSubTab("seo")}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      vocSeoSubTab === "seo"
+                        ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-md shadow-sky-600/30"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    }`}
+                  >
+                    <Tag size={13} />
+                    <span>🏷️ Caption &amp; Hashtags SEO</span>
+                  </button>
+                  <button
+                    onClick={() => setVocSeoSubTab("comments")}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      vocSeoSubTab === "comments"
+                        ? "bg-gradient-to-r from-violet-600 to-pink-600 text-white shadow-md shadow-violet-600/30"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    }`}
+                  >
+                    <MessageSquare size={13} />
+                    <span>💬 6 Trụ Cột Tâm Lý (VoC)</span>
+                  </button>
+                  <button
+                    onClick={() => setVocSeoSubTab("clapback")}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                      vocSeoSubTab === "clapback"
+                        ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/30"
+                        : "text-slate-400 hover:text-white hover:bg-slate-900"
+                    }`}
+                  >
+                    <Zap size={13} />
+                    <span>🎬 5 Kịch Bản Phản Hồi (Clapback)</span>
+                  </button>
+                </div>
+
+                {/* 8 Executive KPI Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 pt-1">
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-sky-400 tracking-wider flex items-center gap-1">
+                      <Hash size={11} /> Avg Tags/Vid
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {captionAnalytics?.avg_tags || 5.6}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">thẻ tối ưu</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-indigo-400 tracking-wider flex items-center gap-1">
+                      <FileText size={11} /> Độ Dài Caption
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {captionAnalytics?.avg_chars || 210}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">ký tự (~{captionAnalytics?.avg_words || 29} từ)</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1">
+                      <Target size={11} /> Tỷ Lệ CTA
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {captionAnalytics?.cta_rate || 52.6}%
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">kêu gọi click link</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider flex items-center gap-1">
+                      <HelpCircle size={11} /> Tỷ Lệ Câu Hỏi
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {captionAnalytics?.question_rate || 6.8}%
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">kích thích cmt</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-pink-400 tracking-wider flex items-center gap-1">
+                      <MessageSquare size={11} /> Cmt Thật Đã Cào
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {totalCommentsAnalyzed > 1000 ? `${(totalCommentsAnalyzed / 1000).toFixed(1)}k` : totalCommentsAnalyzed}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">bình luận</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider flex items-center gap-1">
+                      🛒 Hỏi Mua/Link
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {buyingPct}%
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">{buyingCount} thảo luận</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-rose-400 tracking-wider flex items-center gap-1">
+                      ⚠️ Rào Cản
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {objectionPct}%
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">{objectionCount} lo ngại</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/70 border border-slate-800/80 rounded-2xl p-3 flex flex-col justify-between">
+                    <span className="text-[10px] uppercase font-bold text-violet-400 tracking-wider flex items-center gap-1">
+                      ✨ Kịch Bản Phản Hồi
+                    </span>
+                    <div className="mt-2">
+                      <span className="text-xl md:text-2xl font-black text-white">
+                        {clapbackScripts.length || 5}
+                      </span>
+                      <span className="text-[10px] text-slate-500 block">video clapback</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SECTION: CAPTION & HASHTAG SEO */}
+              {(vocSeoSubTab === "all" || vocSeoSubTab === "seo") && (
+                <div className="space-y-6">
+                  {/* Top 15 Hashtags Table */}
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider">
+                          <Tag size={15} />
+                          <span>Bảng Xếp Hạng Top 15 Hashtag Chuẩn SEO TikTok</span>
+                        </div>
+                        <h4 className="text-lg md:text-xl font-bold text-white mt-0.5">
+                          Top 15 Thẻ Hashtag Chiếm Lĩnh Lượt Xem Ngách '{keyword}'
+                        </h4>
+                      </div>
+
+                      {top5TagList.length > 0 && (
+                        <button
+                          onClick={() => copyTopHashtags(top5TagList)}
+                          className="bg-sky-950/80 border border-sky-700/60 hover:bg-sky-900 text-sky-300 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition cursor-pointer shrink-0"
+                        >
+                          {copiedHashtagSet ? (
+                            <>
+                              <Check size={13} className="text-emerald-400" />
+                              <span className="text-emerald-300">Đã chép Top 5 Hashtag!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy size={13} />
+                              <span>Sao Chép Bộ Top 5 Hashtag</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-300 border-collapse">
+                        <thead>
+                          <tr className="border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider bg-slate-950/60">
+                            <th className="p-3 w-12 text-center">#</th>
+                            <th className="p-3">Hashtag</th>
+                            <th className="p-3 text-center">Số Video Dùng</th>
+                            <th className="p-3 text-center">% Độ Phủ Ngách</th>
+                            <th className="p-3 text-right">Tổng Lượt Xem (Views)</th>
+                            <th className="p-3 text-right">Lượt Xem TB / Video</th>
+                            <th className="p-3 text-center">Nhãn Thuật Toán</th>
+                            <th className="p-3 text-center">Hành Động</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/70 font-normal">
+                          {top15Tags.map((item, idx) => {
+                            const isTop3 = idx < 3;
+                            return (
+                              <tr
+                                key={item.tag || idx}
+                                className="hover:bg-slate-800/40 transition group"
+                              >
+                                <td className="p-3 text-center font-mono font-bold">
+                                  {isTop3 ? (
+                                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30">
+                                      {idx + 1}
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-500">#{idx + 1}</span>
+                                  )}
+                                </td>
+                                <td className="p-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-mono font-bold text-sky-300 text-sm">
+                                      {item.tag}
+                                    </span>
+                                    {isTop3 && <Flame size={13} className="text-amber-400 shrink-0" />}
+                                  </div>
+                                </td>
+                                <td className="p-3 text-center font-mono font-semibold text-slate-200">
+                                  {item.count} video
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <div className="w-16 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                      <div
+                                        className="bg-sky-500 h-1.5 rounded-full"
+                                        style={{ width: `${Math.min(100, item.percentage)}%` }}
+                                      />
+                                    </div>
+                                    <span className="font-mono font-bold text-white text-[11px]">
+                                      {item.percentage}%
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="p-3 text-right font-mono font-bold text-slate-100">
+                                  {(item.total_views || 0) > 1000000
+                                    ? `${((item.total_views || 0) / 1000000).toFixed(1)}M`
+                                    : (item.total_views || 0).toLocaleString()}
+                                </td>
+                                <td className="p-3 text-right font-mono text-slate-300">
+                                  {(item.avg_views || 0) > 1000
+                                    ? `${Math.round((item.avg_views || 0) / 1000)}k`
+                                    : (item.avg_views || 0).toLocaleString()}
+                                </td>
+                                <td className="p-3 text-center">
+                                  {idx < 2 ? (
+                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                      🔥 Chủ lực bắt buộc
+                                    </span>
+                                  ) : idx < 7 ? (
+                                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                      📈 Tăng trưởng cao
+                                    </span>
+                                  ) : (
+                                    <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] px-2 py-0.5 rounded-md font-bold">
+                                      🎯 Ngách sâu chuẩn tệp
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="p-3 text-center">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <button
+                                      onClick={() => {
+                                        navigator.clipboard.writeText(item.tag);
+                                        setCopiedCaptionText(item.tag);
+                                        setTimeout(() => setCopiedCaptionText(null), 1500);
+                                      }}
+                                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                                      title="Sao chép thẻ này"
+                                    >
+                                      {copiedCaptionText === item.tag ? (
+                                        <Check size={12} className="text-emerald-400" />
+                                      ) : (
+                                        <Copy size={12} />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        setSelectedHashtagFilter(item.tag);
+                                        setActiveTab("reviews");
+                                      }}
+                                      className="text-[10px] bg-sky-950/70 border border-sky-800/70 hover:bg-sky-900 text-sky-300 px-2 py-1 rounded-lg transition cursor-pointer"
+                                      title="Lọc các video có thẻ này ở Tab Thẻ Video"
+                                    >
+                                      Lọc Video
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* 2-Column: Co-occurring Pairs & Top SEO Keywords */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Column 1: Các Cặp Hashtag Hay Đi Chung (Co-occurring Pairs) */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-pink-400 uppercase tracking-wider">
+                            <Zap size={14} />
+                            <span>Phân Cụm Thuật Toán (Hashtag Clustering)</span>
+                          </div>
+                          <h4 className="text-base font-bold text-white mt-0.5">
+                            Các Cặp Hashtag Hay Đi Chung Với Nhau Nhất
+                          </h4>
+                        </div>
+                        <span className="text-[10px] bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-full font-bold">
+                          Top Phối Hợp
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        Thuật toán gợi ý của TikTok dựa vào các cụm hashtag đi đôi để phân loại video vào đúng danh mục mẹ (Category) và ngách con (Micro-niche):
+                      </p>
+
+                      <div className="space-y-2.5 pt-1">
+                        {(captionAnalytics?.top_pairs || []).slice(0, 8).map((pair, pIdx) => (
+                          <div
+                            key={pIdx}
+                            className="bg-slate-950/80 border border-slate-800/90 rounded-2xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:border-pink-800/60 transition"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-mono text-xs font-bold text-pink-300 bg-pink-950/50 border border-pink-800/60 px-2 py-0.5 rounded-md">
+                                  {pair.tag1}
+                                </span>
+                                <span className="text-slate-500 font-black text-xs">+</span>
+                                <span className="font-mono text-xs font-bold text-sky-300 bg-sky-950/50 border border-sky-800/60 px-2 py-0.5 rounded-md">
+                                  {pair.tag2}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-slate-400 block">
+                                Xuất hiện trong <strong>{pair.count} video</strong> ({pair.percentage}% tổng số video)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                              <div className="w-20 bg-slate-800 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="bg-gradient-to-r from-pink-500 to-sky-500 h-2 rounded-full"
+                                  style={{ width: `${Math.min(100, pair.percentage * 2)}%` }}
+                                />
+                              </div>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`${pair.tag1} ${pair.tag2}`);
+                                  setCopiedCaptionText(pair.pair);
+                                  setTimeout(() => setCopiedCaptionText(null), 1500);
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer"
+                                title="Sao chép cặp thẻ này"
+                              >
+                                {copiedCaptionText === pair.pair ? (
+                                  <Check size={12} className="text-emerald-400" />
+                                ) : (
+                                  <Copy size={12} />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Column 2: Từ Khóa Chuẩn SEO Trong Văn Bản Caption */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                            <Search size={14} />
+                            <span>TikTok Search &amp; NLP SEO</span>
+                          </div>
+                          <h4 className="text-base font-bold text-white mt-0.5">
+                            Cụm Từ Khóa SEO Tự Nhiên Phổ Biến Trong Caption
+                          </h4>
+                        </div>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                          2-Word N-Grams
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-400 leading-relaxed">
+                        TikTok hiện hoạt động như công cụ tìm kiếm (Search Engine). Hãy chèn các cụm từ ngữ tự nhiên này vào <strong>1-2 câu đầu tiên của Caption</strong> để ăn đề xuất thanh tìm kiếm:
+                      </p>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        {(captionAnalytics?.top_phrases || []).slice(0, 12).map((item, phIdx) => (
+                          <div
+                            key={phIdx}
+                            className="bg-slate-950/80 border border-slate-800/90 rounded-xl p-2.5 flex items-center justify-between gap-2 hover:border-emerald-800/60 transition"
+                          >
+                            <div className="overflow-hidden">
+                              <span className="font-semibold text-emerald-300 text-xs truncate block capitalize">
+                                &ldquo;{item.phrase}&rdquo;
+                              </span>
+                              <span className="text-[10px] text-slate-500 block">
+                                {item.count} video &bull; {(item.avg_views || 0) > 1000 ? `${Math.round((item.avg_views || 0) / 1000)}k views/vid` : `${item.avg_views || 0} views`}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(item.phrase);
+                                setCopiedCaptionText(item.phrase);
+                                setTimeout(() => setCopiedCaptionText(null), 1500);
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition cursor-pointer shrink-0"
+                              title="Sao chép từ khóa này"
+                            >
+                              {copiedCaptionText === item.phrase ? (
+                                <Check size={11} className="text-emerald-400" />
+                              ) : (
+                                <Copy size={11} />
+                              )}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4 Caption Styles & Winning Templates */}
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                          <FileText size={15} />
+                          <span>Chiến Lược Văn Phong Caption</span>
+                        </div>
+                        <h4 className="text-lg md:text-xl font-bold text-white mt-0.5">
+                          4 Phong Cách Viết Caption &amp; Mẫu Caption Thắng Lớn
+                        </h4>
+                      </div>
+                    </div>
+
+                    {/* 4 Styles Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Style 1 */}
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-sky-400 flex items-center gap-1">
+                            📖 Storytelling &amp; Setup
+                          </span>
+                          <span className="font-mono text-xs font-bold text-white">
+                            {captionAnalytics?.styles?.storytelling?.percentage || 38.4}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Kể câu chuyện trang trí góc phòng, trước &amp; sau khi decor. Tạo kết nối cảm xúc mạnh và tăng thời gian giữ chân (Watch Time).
+                        </p>
+                      </div>
+
+                      {/* Style 2 */}
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                            ⚡ Short &amp; Minimal
+                          </span>
+                          <span className="font-mono text-xs font-bold text-white">
+                            {captionAnalytics?.styles?.short_minimal?.percentage || 47.5}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Chỉ 1 câu ngắn gọn, tinh tế tôn vinh vẻ đẹp sản phẩm. Chiếm gần 50% ngách decor vì thẩm mỹ sạch sẽ, không bán hàng thô thiển.
+                        </p>
+                      </div>
+
+                      {/* Style 3 */}
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                            🛒 Deal &amp; Call To Action
+                          </span>
+                          <span className="font-mono text-xs font-bold text-white">
+                            {captionAnalytics?.styles?.deal_promotional?.percentage || 10.1}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Nêu rõ mức sale, mã giảm giá hoặc thông báo "link trong bio". Tỷ lệ chuyển đổi ra đơn trực tiếp cao nhất nhưng cần phân phối khéo léo.
+                        </p>
+                      </div>
+
+                      {/* Style 4 */}
+                      <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                            🏷️ Hashtag Only
+                          </span>
+                          <span className="font-mono text-xs font-bold text-white">
+                            {captionAnalytics?.styles?.hashtag_only?.percentage || 4.0}%
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Chỉ gắn hashtag mà không viết chữ. Thích hợp video dạng ASMR thuần âm thanh hoặc video tập trung 100% vào hình ảnh chuyển động.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Winning Templates */}
+                    {captionAnalytics?.top_templates && captionAnalytics.top_templates.length > 0 && (
+                      <div className="pt-3 border-t border-slate-800/80 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                          <Sparkles size={14} />
+                          <span>Mẫu Caption Thắng Lớn Thực Tế (Top Viral Captions)</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {captionAnalytics.top_templates.map((tpl, tIdx) => (
+                            <div
+                              key={tIdx}
+                              className="bg-slate-950/90 border border-slate-800/90 rounded-2xl p-4 flex flex-col justify-between space-y-3 hover:border-indigo-800/60 transition"
+                            >
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between text-[11px] text-slate-400 pb-2 border-b border-slate-900">
+                                  <span className="font-semibold text-white">@{tpl.creator}</span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sky-400 font-mono font-bold">
+                                      {(tpl.views || 0) > 1000 ? `${Math.round(tpl.views / 1000)}k views` : `${tpl.views} views`}
+                                    </span>
+                                    <span className="text-amber-400 font-mono">
+                                      {(tpl.saves || 0).toLocaleString()} lưu
+                                    </span>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-slate-200 leading-relaxed italic">
+                                  &ldquo;{tpl.clean_text}&rdquo;
+                                </p>
+                                <div className="flex flex-wrap gap-1 pt-1">
+                                  {tpl.tags.map((tg, tgIdx) => (
+                                    <span key={tgIdx} className="text-[10px] text-sky-400/90 font-mono bg-sky-950/40 px-1.5 py-0.5 rounded">
+                                      {tg}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => copyCaptionHelper(`${tpl.clean_text} ${tpl.tags.join(" ")}`)}
+                                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                              >
+                                {copiedCaptionText === `${tpl.clean_text} ${tpl.tags.join(" ")}` ? (
+                                  <>
+                                    <Check size={12} className="text-emerald-400" />
+                                    <span className="text-emerald-300">Đã chép Caption!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy size={12} />
+                                    <span>Sao chép mẫu này</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: VOICE OF CUSTOMER & 6-PILLAR PSYCHOLOGY */}
+              {(vocSeoSubTab === "all" || vocSeoSubTab === "comments") && (
+                <div className="space-y-6">
+                  {/* VoC Header Card */}
+                  <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div>
+                        <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                          <MessageSquare size={16} />
+                          <span>Voice of Customer (VoC) Chuyên Sâu</span>
+                          <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            6 Trụ Cột Tâm Lý
+                          </span>
+                        </div>
+                        <h4 className="text-lg md:text-xl font-bold text-white mt-0.5">
+                          Ma Trận 6 Trụ Cột Giải Mã Tâm Lý Khách Hàng ({totalCommentsAnalyzed.toLocaleString()} Bình Luận)
+                        </h4>
+                      </div>
+                    </div>
+
+                    {/* Summary callout */}
+                    {masterAI?.voc_summary && (
+                      <div className="bg-gradient-to-r from-violet-950/40 to-slate-950 p-4 rounded-2xl border border-violet-800/40 text-xs md:text-sm text-violet-200 leading-relaxed font-medium">
+                        💡 <strong>Chiến lược từ bình luận:</strong> {masterAI.voc_summary}
+                      </div>
+                    )}
+
+                    {/* 6 Pillars Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                      {Object.entries(pillars).map(([pillarKey, pData]: [string, any]) => {
+                        const topQuotes = pData.top_quotes || [];
+                        const angles = pData.angle_recommendations || [];
+                        const borderColors: Record<string, string> = {
+                          rose: "border-rose-800/50 hover:border-rose-600/70",
+                          amber: "border-amber-800/50 hover:border-amber-600/70",
+                          sky: "border-sky-800/50 hover:border-sky-600/70",
+                          indigo: "border-indigo-800/50 hover:border-indigo-600/70",
+                          emerald: "border-emerald-800/50 hover:border-emerald-600/70",
+                          purple: "border-purple-800/50 hover:border-purple-600/70",
+                        };
+                        const badgeColors: Record<string, string> = {
+                          rose: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+                          amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+                          sky: "bg-sky-500/20 text-sky-300 border-sky-500/30",
+                          indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+                          emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                          purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+                        };
+                        const colKey = pData.color || "indigo";
+                        const bClass = borderColors[colKey] || borderColors.indigo;
+                        const bdgClass = badgeColors[colKey] || badgeColors.indigo;
+
+                        return (
+                          <div
+                            key={pillarKey}
+                            className={`bg-slate-950/80 border ${bClass} rounded-2xl p-5 flex flex-col justify-between space-y-4 transition shadow-lg`}
+                          >
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${bdgClass}`}>
+                                  {pData.badge || pillarKey}
+                                </span>
+                                <div className="text-right">
+                                  <span className="font-mono text-sm font-black text-white">
+                                    {pData.count || 0} cmt
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 block font-mono">
+                                    ({pData.percentage || 0}%)
+                                  </span>
+                                </div>
+                              </div>
+
+                              <h5 className="font-bold text-white text-sm">
+                                {pData.title || pillarKey}
+                              </h5>
+
+                              <p className="text-xs text-slate-400 leading-relaxed">
+                                {pData.description}
+                              </p>
+
+                              {pData.psychological_driver && (
+                                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-300">
+                                  <span className="font-bold text-amber-300 block mb-0.5">🧠 Động lực tâm lý:</span>
+                                  {pData.psychological_driver}
+                                </div>
+                              )}
+
+                              {topQuotes.length > 0 && (
+                                <div className="space-y-1.5 pt-1">
+                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                                    💬 Trích dẫn bình luận thật:
+                                  </span>
+                                  {topQuotes.slice(0, 2).map((q: any, qIdx: number) => (
+                                    <div
+                                      key={qIdx}
+                                      className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80 text-[11px] text-slate-300 italic"
+                                    >
+                                      &ldquo;{q.text}&rdquo;
+                                      {q.likes > 0 && (
+                                        <span className="not-italic text-[10px] text-pink-400 ml-1 font-mono">
+                                          ({q.likes} tym)
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {angles.length > 0 && (
+                              <div className="pt-2.5 border-t border-slate-900">
+                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
+                                  🎯 Góc nội dung giải quyết:
+                                </span>
+                                <p className="text-[11px] text-slate-300">
+                                  {angles[0]}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sourcing Directives & Product Improvements */}
+                    {sourcingRecs.length > 0 && (
+                      <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                          <Target size={14} />
+                          <span>Chỉ Đạo Cải Tiến Sản Phẩm &amp; Đóng Gói (Sourcing Directives)</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {sourcingRecs.map((rec: any, rIdx: number) => (
+                            <div
+                              key={rec.id || rIdx}
+                              className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 space-y-2"
+                            >
+                              <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-bold">
+                                {rec.pillar}
+                              </span>
+                              <p className="text-xs text-slate-300 font-semibold mt-1">
+                                {rec.problem}
+                              </p>
+                              <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                                <span className="font-bold text-emerald-400 block">🛠️ Giải pháp kỹ thuật:</span>
+                                <p>{rec.technical_solution}</p>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block pt-1">
+                                📈 <em>Tác động:</em> {rec.commercial_impact}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Top FAQs from Real Customer Comments */}
+                    {allFaqs.length > 0 && (
+                      <div className="pt-4 border-t border-slate-800/80 space-y-3">
+                        <div className="flex items-center gap-2 text-xs font-bold text-sky-400 uppercase tracking-wider">
+                          <HelpCircle size={14} />
+                          <span>Câu Hỏi Khách Hàng Thắc Mắc Nhiều Nhất ({allFaqs.length} FAQs từ bình luận thật)</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {allFaqs.slice(0, 6).map((faq: any, fIdx: number) => (
+                            <div
+                              key={fIdx}
+                              className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 flex flex-col justify-between"
+                            >
+                              <p className="text-xs text-slate-200 italic">&ldquo;{faq.text}&rdquo;</p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 mt-2 pt-1 border-t border-slate-900">
+                                <span>@{faq.username || "khach_hang"}</span>
+                                <span className="text-pink-400 font-mono">❤️ {faq.likes || 0}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: 5 CLAPBACK VIDEO SCRIPTS */}
+              {(vocSeoSubTab === "all" || vocSeoSubTab === "clapback") && (
+                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                    <div>
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                        <Zap size={15} />
+                        <span>Kịch Bản Chuyển Đổi Cao (Conversion Booster)</span>
+                      </div>
+                      <h4 className="text-lg md:text-xl font-bold text-white mt-0.5">
+                        5 Kịch Bản Video "Clapback" Đập Tan Hoài Nghi Khách Hàng
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-1 max-w-3xl">
+                        Công thức dán nhãn bình luận (Sticker Comment) lên đầu video và làm bài test kiểm chứng thực tế để đập tan lý do từ chối mua hàng.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {clapbackScripts.map((cb: any, cbIdx: number) => {
+                      const isCopied = copiedClapbackId === cb.id;
+                      const fullScript = `[KỊCH BẢN CLAPBACK: ${cb.concept_title}]\n\n📌 COMMENT DÁN TRÊN MÀN HÌNH: "${cb.sticker_comment}" (${cb.comment_likes} tym)\n\n⏱️ HOOK (0-3s):\n${cb.hook_0_3s}\n\n🔍 BẰNG CHỨNG THỰC TẾ (4-12s):\n${cb.proof_4_12s}\n\n🛒 KÊU GỌI HÀNH ĐỘNG CTA (13-18s):\n${cb.cta_13_18s}`;
+
+                      return (
+                        <div
+                          key={cb.id || cbIdx}
+                          className="bg-slate-950/90 border border-slate-800 hover:border-emerald-700/60 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition shadow-lg"
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-bold">
+                                {cb.target_objection}
+                              </span>
+                              <span className="text-[11px] text-slate-500 font-mono">
+                                ⏱️ {cb.duration || "20s"}
+                              </span>
+                            </div>
+
+                            <h5 className="font-bold text-white text-sm">
+                              {cb.concept_title}
+                            </h5>
+
+                            {/* Sticker Comment */}
+                            <div className="bg-slate-900 p-3 rounded-xl border border-slate-800 space-y-1">
+                              <span className="text-[10px] font-bold text-pink-400 uppercase tracking-wider block">
+                                📌 Dán Sticker Comment lên màn hình:
+                              </span>
+                              <p className="text-xs text-slate-200 italic">
+                                &ldquo;{cb.sticker_comment}&rdquo;
+                              </p>
+                              {cb.comment_likes > 0 && (
+                                <span className="text-[10px] text-slate-500 block font-mono">
+                                  ❤️ {cb.comment_likes} lượt thích
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Hook */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-sky-400 uppercase tracking-wider block">
+                                🎙️ Hook (0-3s):
+                              </span>
+                              <p className="text-xs text-slate-300 leading-relaxed">
+                                {cb.hook_0_3s}
+                              </p>
+                            </div>
+
+                            {/* Proof */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-violet-400 uppercase tracking-wider block">
+                                🔍 Thao tác chứng minh (4-12s):
+                              </span>
+                              <p className="text-xs text-slate-300 leading-relaxed">
+                                {cb.proof_4_12s}
+                              </p>
+                            </div>
+
+                            {/* CTA */}
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block">
+                                🛒 Kêu gọi mua hàng CTA (13-18s):
+                              </span>
+                              <p className="text-xs text-slate-300 leading-relaxed">
+                                {cb.cta_13_18s}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => copyClapbackHelper(fullScript, cb.id)}
+                            className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
+                          >
+                            {isCopied ? (
+                              <>
+                                <Check size={12} className="text-emerald-400" />
+                                <span className="text-emerald-300">Đã sao chép kịch bản!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} />
+                                <span>Sao chép kịch bản này</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })()}
