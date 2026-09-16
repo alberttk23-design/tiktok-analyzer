@@ -61,8 +61,28 @@ def extract_json(text):
     return None
 
 
+def classify_ad_angle(caption: str = "", transcript: str = "", spoken_hook: str = "", visual_hook: str = "", comments_text: str = "") -> str:
+    """Classify video into DTC Ecommerce Hook & Angle taxonomy."""
+    text = f"{caption} {transcript} {spoken_hook} {visual_hook} {comments_text}".lower()
+    
+    if any(w in text for w in ["vs", "compare", "pottery barn", "target", "costco", "dupe", "better than", "instead of", "difference"]):
+        return "Us vs Them (Dupe / Comparison)"
+    elif any(w in text for w in ["problem", "solution", "hate", "dark corner", "can't keep", "dying", "dead plant", "solve", "fixed", "never water", "killed"]):
+        return "Problem - Solution (PAS)"
+    elif any(w in text for w in ["fake", "cheap", "real", "smell", "fall over", "cats", "heavy", "sturdy", "weight"]):
+        return "Objection Buster"
+    elif any(w in text for w in ["amazon find", "under $", "deal", "steal", "budget", "affordable", "haul", "cart", "worth it", "hack"]):
+        return "Smart Shopper / Bargain Find"
+    elif any(w in text for w in ["asmr", "fluff", "moss", "satisfying", "styling", "unboxing", "pack", "touch", "bend", "leaves"]):
+        return "Satisfying ASMR / Styling"
+    elif any(w in text for w in ["transform", "before and after", "room tour", "aesthetic", "makeover", "renovation", "corner", "cozy", "bedroom", "living room"]):
+        return "Aesthetic Room Transformation"
+    else:
+        return "Lifestyle Context Hook"
+
+
 def build_fallback_review(video, keyword, comment_insight=None):
-    """Generate high-accuracy creative breakdown with Voice-of-Customer comment context."""
+    """Generate high-accuracy creative breakdown with Voice-of-Customer comment context and DTC angle."""
     caption = video.get("caption") or ""
     views = video.get("views") or 0
     likes = video.get("likes") or 0
@@ -103,6 +123,7 @@ def build_fallback_review(video, keyword, comment_insight=None):
             comment_details = " | " + " & ".join(parts)
             base_psych += f" (Khán giả phản hồi thực tế: {comment_insight.get('summary', '')})"
 
+    ad_angle = classify_ad_angle(caption=caption, comments_text=comment_details)
     hook_desc = f"{hook_type}: Opening with '{caption[:75]}...' to capture viewer attention within 3 seconds."
     viral_desc = f"Driven by {views:,} views and {saves:,} saves ({comments:,} comments) due to high shareability and home decor reference value.{comment_details}"
 
@@ -120,13 +141,22 @@ def build_fallback_review(video, keyword, comment_insight=None):
         "viral_score": viral_score,
         "hook_score": hook_score,
         "conversion_score": conv_score,
+        "ad_angle": ad_angle,
+        "transcript": video.get("transcript", ""),
+        "spoken_hook": video.get("spoken_hook", ""),
+        "visual_hook": video.get("visual_hook", ""),
+        "setting": video.get("setting", ""),
+        "on_screen_text": video.get("on_screen_text", ""),
+        "visual_style": video.get("visual_style", ""),
+        "keyframes": video.get("keyframes", []),
         "strengths": json.dumps(["High organic trust", "Clear visual payoff", "Strong save-rate appeal"], ensure_ascii=False),
         "weaknesses": json.dumps(["Could enhance urgency with limited-time call to action"], ensure_ascii=False),
         "raw_json": json.dumps({
             "hook": hook_desc,
             "viral": viral_desc,
             "buyer_psychology": base_psych,
-            "winning_formula": win_formula
+            "winning_formula": win_formula,
+            "ad_angle": ad_angle
         }, ensure_ascii=False)
     }
 
@@ -413,3 +443,73 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần:
     db.save_master_analysis(keyword, data)
     print(f"[AI Engine] Master analysis saved for '{keyword}'.")
     return data
+
+
+def analyze_single_video_multimodal(video_id: str) -> dict:
+    """
+    Perform on-demand deep multimodal analysis (Whisper Audio + Qwen-VL Vision)
+    for a specific video and save results to DB.
+    """
+    from backend.video_vision import analyze_video_multimodal_full
+    conn = db.get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM videos WHERE video_id = ?", (str(video_id),))
+    video_row = cursor.fetchone()
+    conn.close()
+
+    if not video_row:
+        raise ValueError(f"Video {video_id} not found in database")
+
+    video = dict(video_row)
+    caption = video.get("caption") or ""
+    url = video.get("url") or ""
+    duration = float(video.get("duration_sec") or 15.0)
+
+    # Run end-to-end multimodal pipeline
+    mm_data = analyze_video_multimodal_full(
+        video_url=url,
+        video_id=str(video_id),
+        caption=caption,
+        duration=duration
+    )
+
+    # Classify DTC angle with all multimodal context
+    angle = classify_ad_angle(
+        caption=caption,
+        transcript=mm_data.get("transcript", ""),
+        spoken_hook=mm_data.get("spoken_hook", ""),
+        visual_hook=mm_data.get("visual_hook", "")
+    )
+    mm_data["ad_angle"] = angle
+
+    # Update database
+    db.update_multimodal_analysis(str(video_id), mm_data)
+    print(f"[AI Engine] Multimodal analysis completed for video {video_id}")
+    return mm_data
+
+
+def analyze_top_videos_multimodal(keyword: str, top_n: int = 5):
+    """
+    Deep analyze the top N viral scoring videos for a keyword.
+    """
+    conn = db.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT video_id FROM videos
+    WHERE keyword = ?
+    ORDER BY score DESC
+    LIMIT ?
+    """, (keyword, top_n))
+    rows = cursor.fetchall()
+    conn.close()
+
+    results = []
+    for r in rows:
+        vid = r["video_id"]
+        try:
+            res = analyze_single_video_multimodal(vid)
+            results.append({"video_id": vid, "status": "success", "data": res})
+        except Exception as e:
+            results.append({"video_id": vid, "status": "error", "error": str(e)})
+    return results
+

@@ -6,6 +6,7 @@ from typing import Optional
 from pathlib import Path
 from collections import Counter
 from fastapi import FastAPI, BackgroundTasks, Query, Response, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -37,6 +38,12 @@ class AnalyzeRequest(BaseModel):
 
 class CrawlCommentsRequest(BaseModel):
     max_comments: int = 1000
+
+
+class MultimodalBatchRequest(BaseModel):
+    keyword: str
+    top_n: int = 5
+
 
 
 def execute_pipeline(job_id: str, keyword: str, limit: int):
@@ -320,9 +327,10 @@ def export_csv(keyword: Optional[str] = Query(None)):
     fieldnames = [
         "rank", "video_id", "creator", "views", "likes", "comments",
         "saves", "reposts", "engagement_rate", "score", "upload_date",
+        "ad_angle", "spoken_hook", "visual_hook", "setting", "on_screen_text",
         "ai_phan_tich_tong_the",
         "hook_analysis", "viral_mechanics", "buyer_psychology",
-        "winning_formula", "top_buying_intent_questions",
+        "winning_formula", "spoken_transcript", "top_buying_intent_questions",
         "top_customer_objections", "comments_analyzed_count",
         "url", "caption"
     ]
@@ -352,11 +360,17 @@ def export_csv(keyword: Optional[str] = Query(None)):
             "engagement_rate": v.get("engagement_rate"),
             "score": v.get("score"),
             "upload_date": v.get("upload_date"),
+            "ad_angle": rev.get("ad_angle", ""),
+            "spoken_hook": rev.get("spoken_hook", ""),
+            "visual_hook": rev.get("visual_hook", ""),
+            "setting": rev.get("setting", ""),
+            "on_screen_text": rev.get("on_screen_text", ""),
             "ai_phan_tich_tong_the": ai_col,
             "hook_analysis": rev.get("hook", ""),
             "viral_mechanics": rev.get("viral", ""),
             "buyer_psychology": rev.get("buyer_psychology", ""),
             "winning_formula": rev.get("winning_formula", ""),
+            "spoken_transcript": rev.get("transcript", ""),
             "top_buying_intent_questions": intent_q,
             "top_customer_objections": obj_text,
             "comments_analyzed_count": ins.get("total_crawled", 0),
@@ -383,6 +397,47 @@ def export_csv(keyword: Optional[str] = Query(None)):
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@app.get("/api/keyframe/{filename}")
+def get_keyframe(filename: str):
+    file_path = BASE_DIR / "data" / "keyframes" / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Keyframe not found")
+    return FileResponse(str(file_path))
+
+
+@app.post("/api/analyze-multimodal/{video_id}")
+def analyze_video_multimodal_endpoint(video_id: str):
+    """Run full local multimodal analysis (Whisper Audio + Qwen-VL Vision) for a video."""
+    try:
+        res = ai_engine.analyze_single_video_multimodal(video_id)
+        return {"status": "success", "video_id": video_id, "data": res}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/analyze-multimodal-top")
+def analyze_top_multimodal_endpoint(req: MultimodalBatchRequest, background_tasks: BackgroundTasks):
+    """Deep analyze top N videos in background with Whisper & Qwen-VL."""
+    job_id = str(uuid.uuid4())[:8]
+    db.create_job(job_id, req.keyword)
+
+    def run_batch():
+        try:
+            db.update_job(job_id, status="processing", message=f"Đang bóc băng Whisper & soi góc quay Qwen-VL cho Top {req.top_n} video...")
+            ai_engine.analyze_top_videos_multimodal(req.keyword, top_n=req.top_n)
+            db.update_job(job_id, status="completed", progress=100, message=f"Đã hoàn thành phân tích Multimodal cho Top {req.top_n} video!")
+        except Exception as e:
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_batch)
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "message": f"Bắt đầu chuỗi Multimodal AI cho Top {req.top_n} video từ khóa '{req.keyword}'"
+    }
+
 
 
 if __name__ == "__main__":

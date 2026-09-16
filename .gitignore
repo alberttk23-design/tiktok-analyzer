@@ -28,6 +28,13 @@ data/videos/
 data/speech_analysis/
 data/transcripts/
 data/results/
+data/keyframes/
+data/cache/
+data/*.jpg
+data/*.png
+data/*.mp4
+data/*.mp3
+data/*.image
 data/tiktok_debug.*
 
 # Local Database (Auto-created on start)

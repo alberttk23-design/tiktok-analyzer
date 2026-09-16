@@ -146,6 +146,23 @@ def init_db():
     )
     """)
 
+    # Safe migration for new multimodal columns in analysis_reviews
+    cursor.execute("PRAGMA table_info(analysis_reviews)")
+    cols = {row["name"] for row in cursor.fetchall()}
+    new_cols = [
+        ("transcript", "TEXT"),
+        ("spoken_hook", "TEXT"),
+        ("visual_hook", "TEXT"),
+        ("setting", "TEXT"),
+        ("on_screen_text", "TEXT"),
+        ("visual_style", "TEXT"),
+        ("ad_angle", "TEXT"),
+        ("keyframes_json", "TEXT")
+    ]
+    for col_name, col_type in new_cols:
+        if col_name not in cols:
+            cursor.execute(f"ALTER TABLE analysis_reviews ADD COLUMN {col_name} {col_type}")
+
     conn.commit()
     conn.close()
 
@@ -329,17 +346,63 @@ def save_review(review_data):
     vid = review_data.get("video_id")
     if vid:
         cursor.execute("DELETE FROM analysis_reviews WHERE video_id = ?", (str(vid),))
+
+    data = dict(review_data)
+    data.setdefault("transcript", "")
+    data.setdefault("spoken_hook", "")
+    data.setdefault("visual_hook", "")
+    data.setdefault("setting", "")
+    data.setdefault("on_screen_text", "")
+    data.setdefault("visual_style", "")
+    data.setdefault("ad_angle", "")
+    kf = data.get("keyframes")
+    data["keyframes_json"] = json.dumps(kf, ensure_ascii=False) if isinstance(kf, list) else data.get("keyframes_json", "[]")
+
     cursor.execute("""
     INSERT INTO analysis_reviews (
         video_id, keyword, hook, viral, buyer_psychology, winning_formula,
-        viral_score, hook_score, conversion_score, strengths, weaknesses, raw_json
+        viral_score, hook_score, conversion_score, strengths, weaknesses, raw_json,
+        transcript, spoken_hook, visual_hook, setting, on_screen_text, visual_style, ad_angle, keyframes_json
     ) VALUES (
         :video_id, :keyword, :hook, :viral, :buyer_psychology, :winning_formula,
-        :viral_score, :hook_score, :conversion_score, :strengths, :weaknesses, :raw_json
+        :viral_score, :hook_score, :conversion_score, :strengths, :weaknesses, :raw_json,
+        :transcript, :spoken_hook, :visual_hook, :setting, :on_screen_text, :visual_style, :ad_angle, :keyframes_json
     )
-    """, review_data)
+    """, data)
     conn.commit()
     conn.close()
+
+
+def update_multimodal_analysis(video_id: str, data: dict):
+    conn = get_db()
+    cursor = conn.cursor()
+    kf = data.get("keyframes")
+    kf_json = json.dumps(kf, ensure_ascii=False) if isinstance(kf, list) else data.get("keyframes_json", "[]")
+    cursor.execute("""
+    UPDATE analysis_reviews
+    SET transcript = ?,
+        spoken_hook = ?,
+        visual_hook = ?,
+        setting = ?,
+        on_screen_text = ?,
+        visual_style = ?,
+        ad_angle = ?,
+        keyframes_json = ?
+    WHERE video_id = ?
+    """, (
+        data.get("transcript", ""),
+        data.get("spoken_hook", ""),
+        data.get("visual_hook", ""),
+        data.get("setting", ""),
+        data.get("on_screen_text", ""),
+        data.get("visual_style", ""),
+        data.get("ad_angle", "Aesthetic Room Tour"),
+        kf_json,
+        str(video_id)
+    ))
+    conn.commit()
+    conn.close()
+
 
 
 def save_creative_ideas(keyword, ideas):
@@ -483,6 +546,13 @@ def get_results_by_keyword(keyword=None):
                 item["weaknesses"] = json.loads(item["weaknesses"])
             except Exception:
                 pass
+        if item.get("keyframes_json"):
+            try:
+                item["keyframes"] = json.loads(item["keyframes_json"])
+            except Exception:
+                item["keyframes"] = []
+        else:
+            item["keyframes"] = []
         reviews.append(item)
 
     cursor.execute("""

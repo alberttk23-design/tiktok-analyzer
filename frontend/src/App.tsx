@@ -29,6 +29,10 @@ import {
   Zap,
   Cpu,
   Target,
+  Mic,
+  Camera,
+  Film,
+  SlidersHorizontal,
 } from "lucide-react";
 
 interface VideoItem {
@@ -60,6 +64,14 @@ interface ReviewItem {
   conversion_score: number;
   strengths?: string[];
   weaknesses?: string[];
+  ad_angle?: string;
+  transcript?: string;
+  spoken_hook?: string;
+  visual_hook?: string;
+  setting?: string;
+  on_screen_text?: string;
+  visual_style?: string;
+  keyframes?: string[];
 }
 
 interface CommentInsight {
@@ -155,6 +167,12 @@ function App() {
   // Video-specific comment crawl state
   const [crawlingCommentVid, setCrawlingCommentVid] = useState<string | null>(null);
   const [expandedCommentVid, setExpandedCommentVid] = useState<string | null>(null);
+
+  // Multimodal AI states (Whisper Audio & Qwen-VL Vision)
+  const [multimodalModalVid, setMultimodalModalVid] = useState<ReviewItem | null>(null);
+  const [analyzingMultimodalVid, setAnalyzingMultimodalVid] = useState<string | null>(null);
+  const [analyzingTopMultimodal, setAnalyzingTopMultimodal] = useState(false);
+  const [selectedAngleFilter, setSelectedAngleFilter] = useState<string>("all");
 
   const pollingRef = useRef<any>(null);
 
@@ -372,6 +390,106 @@ ${data.master_analysis.summary}\n`;
     navigator.clipboard.writeText(promptText);
     setCopiedPrompt(true);
     setTimeout(() => setCopiedPrompt(false), 3000);
+  }
+
+  // On-demand deep multimodal analysis (Whisper + Qwen-VL)
+  async function handleRunMultimodal(videoId: string) {
+    if (analyzingMultimodalVid) return;
+    setAnalyzingMultimodalVid(videoId);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/analyze-multimodal/${videoId}`, {
+        method: "POST",
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        if (json.data && data) {
+          const updatedReviews = data.reviews.map((r) => {
+            if (r.video_id === videoId) {
+              return {
+                ...r,
+                ...json.data,
+              };
+            }
+            return r;
+          });
+
+          setData({
+            ...data,
+            reviews: updatedReviews,
+          });
+
+          const currentRev = updatedReviews.find((r) => r.video_id === videoId);
+          if (currentRev) {
+            setMultimodalModalVid(currentRev);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Multimodal analysis error:", e);
+    } finally {
+      setAnalyzingMultimodalVid(null);
+    }
+  }
+
+  // Batch deep multimodal analysis for top N viral videos
+  async function handleRunTopMultimodal(topN = 5) {
+    if (analyzingTopMultimodal || !keyword.trim()) return;
+    setAnalyzingTopMultimodal(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/analyze-multimodal-top`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: keyword.trim(), top_n: topN }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const jobId = json.job_id;
+        setCurrentJob({
+          job_id: jobId,
+          keyword: keyword,
+          status: "started",
+          progress: 15,
+          message: `Đang bóc băng Whisper & soi góc quay Qwen-VL cho Top ${topN} video viral...`,
+          new_videos_count: 0,
+        });
+
+        if (pollingRef.current) clearInterval(pollingRef.current);
+        pollingRef.current = setInterval(() => pollJob(jobId), 2000);
+      }
+    } catch (e) {
+      console.error("Top multimodal error:", e);
+    } finally {
+      setAnalyzingTopMultimodal(false);
+    }
+  }
+
+  function renderAdAngleBadge(angle?: string) {
+    if (!angle) return null;
+    let badgeColor = "bg-slate-800 text-slate-300 border-slate-700";
+    if (angle.includes("Problem")) {
+      badgeColor = "bg-amber-950/80 text-amber-300 border-amber-700/80";
+    } else if (angle.includes("Us vs Them")) {
+      badgeColor = "bg-purple-950/80 text-purple-300 border-purple-700/80";
+    } else if (angle.includes("Objection")) {
+      badgeColor = "bg-rose-950/80 text-rose-300 border-rose-700/80";
+    } else if (angle.includes("Smart Shopper") || angle.includes("Bargain")) {
+      badgeColor = "bg-blue-950/80 text-blue-300 border-blue-700/80";
+    } else if (angle.includes("ASMR")) {
+      badgeColor = "bg-cyan-950/80 text-cyan-300 border-cyan-700/80";
+    } else if (angle.includes("Transformation")) {
+      badgeColor = "bg-emerald-950/80 text-emerald-300 border-emerald-700/80";
+    }
+
+    return (
+      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badgeColor} flex items-center gap-1 shadow-sm`}>
+        <Target size={11} />
+        {angle}
+      </span>
+    );
   }
 
   const reviewMap = new Map<string, ReviewItem>();
@@ -808,17 +926,69 @@ ${data.master_analysis.summary}\n`;
           </div>
         )}
 
-        {/* TAB 1: REVIEWS WITH COMMENTS & 4 PILLARS */}
+        {/* TAB 1: REVIEWS WITH COMMENTS & 4 PILLARS & MULTIMODAL */}
         {activeTab === "reviews" && (
           <div className="space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
-                <Sparkles className="text-pink-400" size={20} />
-                Video Creative Breakdown &bull; Tiếng Nói Khách Hàng (Customer Comments)
-              </h2>
-              <span className="text-xs text-slate-400">
-                Từ khóa: <strong className="text-slate-200">{data?.keyword}</strong>
+            {/* Header & Angle Filter Toolbar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800">
+              <div>
+                <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
+                  <Sparkles className="text-pink-400" size={20} />
+                  Creative Intelligence &bull; Tiếng Nói Khách Hàng &bull; Multimodal AI
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Phân loại trường phái DTC &bull; Bóc băng Whisper &bull; Soi góc quay Qwen-VL (100% Cục Bộ M4)
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleRunTopMultimodal(5)}
+                  disabled={analyzingTopMultimodal}
+                  className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-violet-600/25 transition cursor-pointer disabled:opacity-50"
+                  title="Tự động tải stream, bóc băng và soi 3 khung hình cho Top 5 video viral nhất"
+                >
+                  {analyzingTopMultimodal ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Đang phân tích Top 5...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={13} className="text-yellow-300" />
+                      <span>🚀 Bóc Băng & Soi Góc Quay Top 5 Winners</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Filter Chips by DTC Angle */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-slate-400 flex items-center gap-1 mr-1 text-[11px] font-semibold">
+                <SlidersHorizontal size={12} /> Lọc Trường Phái DTC:
               </span>
+              {[
+                { id: "all", label: "Tất cả" },
+                { id: "Transformation", label: "✨ Room Transformation" },
+                { id: "Problem", label: "🎯 Problem-Solution (PAS)" },
+                { id: "Objection", label: "🛡️ Objection Buster" },
+                { id: "Smart Shopper", label: "💰 Smart Shopper / Find" },
+                { id: "ASMR", label: "🌿 ASMR / Styling" },
+                { id: "Us vs Them", label: "⚔️ Us vs Them" },
+              ].map((chip) => (
+                <button
+                  key={chip.id}
+                  onClick={() => setSelectedAngleFilter(chip.id)}
+                  className={`px-3 py-1 rounded-full font-medium transition cursor-pointer text-xs ${
+                    selectedAngleFilter === chip.id
+                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/30 font-bold"
+                      : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
             </div>
 
             {(!data?.videos || data.videos.length === 0) ? (
@@ -829,7 +999,14 @@ ${data.master_analysis.summary}\n`;
               </div>
             ) : (
               <div className="grid gap-4">
-                {data.videos.map((vid, idx) => {
+                {data.videos
+                  .filter((vid) => {
+                    if (selectedAngleFilter === "all") return true;
+                    const r = reviewMap.get(vid.video_id);
+                    const ang = r?.ad_angle || "";
+                    return ang.toLowerCase().includes(selectedAngleFilter.toLowerCase());
+                  })
+                  .map((vid, idx) => {
                   const rev = reviewMap.get(vid.video_id);
                   const ins = insightsMap[vid.video_id];
                   const isExpanded = expandedCommentVid === vid.video_id;
@@ -887,6 +1064,7 @@ ${data.master_analysis.summary}\n`;
                             <TrendingUp size={12} />
                             <span>Score: {vid.score || 75}</span>
                           </div>
+                          {renderAdAngleBadge(rev?.ad_angle)}
                         </div>
                       </div>
 
@@ -932,6 +1110,92 @@ ${data.master_analysis.summary}\n`;
                           </p>
                         </div>
                       </div>
+
+                      {/* MULTIMODAL INTELLIGENCE 360 (Whisper Audio + Qwen-VL Vision) */}
+                      {rev?.spoken_hook || rev?.visual_hook || (rev?.keyframes && rev.keyframes.length > 0) ? (
+                        <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-violet-950/40 via-slate-950 to-pink-950/30 border border-violet-800/40">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                <Mic size={11} /> Whisper Audio
+                              </span>
+                              <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
+                                <Camera size={11} /> Qwen-VL Vision
+                              </span>
+                              <span className="text-xs font-bold text-slate-200">Multimodal Intelligence (100% M4)</span>
+                            </div>
+                            <button
+                              onClick={() => setMultimodalModalVid(rev)}
+                              className="text-xs text-pink-400 hover:text-pink-300 font-semibold flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <span>Xem toàn văn lời thoại & 3 khung hình</span>
+                              <ChevronRight size={13} />
+                            </button>
+                          </div>
+
+                          <div className="grid md:grid-cols-12 gap-3 items-center">
+                            {rev?.keyframes && rev.keyframes.length > 0 && (
+                              <div className="md:col-span-4 flex items-center gap-2">
+                                {rev.keyframes.slice(0, 3).map((kf, kfIdx) => (
+                                  <img
+                                    key={kfIdx}
+                                    src={`${API_BASE}${kf}`}
+                                    alt={`Keyframe ${kfIdx + 1}`}
+                                    className="w-20 h-24 object-cover rounded-xl border border-slate-700 hover:scale-105 transition cursor-pointer shadow-md"
+                                    onClick={() => setMultimodalModalVid(rev)}
+                                    title="Bấm để phóng to và xem phân tích"
+                                  />
+                                ))}
+                              </div>
+                            )}
+
+                            <div className={rev?.keyframes && rev.keyframes.length > 0 ? "md:col-span-8 space-y-2" : "md:col-span-12 space-y-2"}>
+                              {rev?.spoken_hook && (
+                                <p className="text-xs text-slate-300">
+                                  <strong className="text-pink-400 font-semibold">🎙️ Lời thoại mở đầu (0-3s): </strong>
+                                  <span className="italic text-slate-100">&ldquo;{rev.spoken_hook}&rdquo;</span>
+                                </p>
+                              )}
+                              {rev?.visual_hook && (
+                                <p className="text-xs text-slate-300">
+                                  <strong className="text-violet-400 font-semibold">👁️ Hook thị giác: </strong>
+                                  <span className="text-slate-200">{rev.visual_hook}</span>
+                                </p>
+                              )}
+                              {rev?.on_screen_text && rev.on_screen_text !== "None" && rev.on_screen_text !== "Không có" && (
+                                <p className="text-xs text-slate-400">
+                                  <strong className="text-amber-400 font-semibold">🔤 Chữ trên màn hình: </strong>
+                                  <span className="font-mono text-slate-200">{rev.on_screen_text}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-4 flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
+                          <div className="flex items-center gap-2 text-xs text-slate-400">
+                            <Film size={14} className="text-purple-400" />
+                            <span>Chưa bóc băng lời nói KOC & soi góc quay thị giác cho video này.</span>
+                          </div>
+                          <button
+                            onClick={() => handleRunMultimodal(vid.video_id)}
+                            disabled={analyzingMultimodalVid === vid.video_id}
+                            className="bg-gradient-to-r from-pink-600 to-violet-600 hover:from-pink-500 hover:to-violet-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-pink-600/20 transition cursor-pointer disabled:opacity-50"
+                          >
+                            {analyzingMultimodalVid === vid.video_id ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin text-white" />
+                                <span>Đang bóc băng Whisper & Qwen-VL...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Zap size={12} className="text-yellow-300" />
+                                <span>⚡ Bóc Băng & Soi Góc Quay</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
 
                       {/* VOICE OF CUSTOMER / COMMENTS ACCORDION */}
                       <div className="mt-4 pt-3.5 border-t border-slate-800/70">
@@ -1416,6 +1680,178 @@ ${data.master_analysis.summary}\n`;
 
               <button
                 onClick={() => setSelectedConcept(null)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-xl transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Multimodal Deep Analysis Modal */}
+        {multimodalModalVid && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-2xl">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-violet-600 rounded-2xl shadow-lg shadow-pink-500/20">
+                    <Film size={20} className="text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white flex items-center gap-2">
+                      <span>Bản Bóc Băng & Soi Góc Quay Multimodal 360°</span>
+                      <span className="bg-pink-950/80 border border-pink-700 text-pink-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Mac Mini M4 Local AI
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Video ID: {multimodalModalVid.video_id} &bull; Phân tích bởi Whisper AI + Qwen-VL Vision
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setMultimodalModalVid(null)}
+                  className="text-slate-400 hover:text-white text-xl font-bold p-2 rounded-xl hover:bg-slate-800 transition cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 3 Keyframes Preview Gallery */}
+              {multimodalModalVid.keyframes && multimodalModalVid.keyframes.length > 0 && (
+                <div className="mb-6">
+                  <div className="flex items-center gap-2 text-xs font-bold text-violet-400 uppercase tracking-wider mb-3">
+                    <Camera size={14} />
+                    <span>3 Khung Hình Chủ Chốt Được Trích Xuất (Keyframes)</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {multimodalModalVid.keyframes.map((kf, kfIdx) => {
+                      const labels = ["0-1s: Hook Thị Giác (Scroll-Stopper)", "Giữa: Trình Diễn / Góc Phòng", "Cuối: Kêu Gọi Hành Động (CTA)"];
+                      return (
+                        <div key={kfIdx} className="bg-slate-950 p-2.5 rounded-2xl border border-slate-800 flex flex-col items-center">
+                          <img
+                            src={`${API_BASE}${kf}`}
+                            alt={labels[kfIdx] || `Keyframe ${kfIdx + 1}`}
+                            className="w-full h-44 object-cover rounded-xl border border-slate-800 mb-2 shadow-md"
+                          />
+                          <span className="text-[11px] font-medium text-slate-400 text-center">
+                            {labels[kfIdx] || `Khung hình ${kfIdx + 1}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Grid 2 Columns: Spoken Audio & Visual Breakdown */}
+              <div className="grid md:grid-cols-2 gap-4 mb-6">
+                {/* Audio Column */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-pink-400 uppercase tracking-wider">
+                        <Mic size={14} />
+                        <span>Lời Thoại Bóc Băng (Whisper AI)</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (multimodalModalVid.transcript) {
+                            navigator.clipboard.writeText(multimodalModalVid.transcript);
+                            alert("Đã sao chép toàn văn lời thoại!");
+                          }
+                        }}
+                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer bg-slate-900 px-2 py-1 rounded-lg border border-slate-800"
+                      >
+                        <Copy size={11} /> Sao chép
+                      </button>
+                    </div>
+
+                    {/* Spoken Hook Highlight */}
+                    <div className="bg-pink-950/30 border border-pink-800/40 p-3 rounded-xl mb-3">
+                      <span className="text-[10px] font-bold text-pink-400 uppercase block mb-1">
+                        🎣 Lời Thoại Mở Đầu 3 Giây (Spoken Hook)
+                      </span>
+                      <p className="text-sm font-semibold text-white italic">
+                        &ldquo;{multimodalModalVid.spoken_hook || "Không phát hiện lời nói trong 3s đầu"}&rdquo;
+                      </p>
+                    </div>
+
+                    {/* Full Transcript */}
+                    <div className="mt-2">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
+                        Toàn Văn Lời Thoại KOC:
+                      </span>
+                      <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto pr-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800/60 font-sans">
+                        {multimodalModalVid.transcript || "Âm thanh nền nhạc (Không có lời thoại)"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Visual Vision Column */}
+                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 space-y-3.5">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-violet-400 uppercase tracking-wider">
+                    <Camera size={14} />
+                    <span>Phân Tích Thị Giác (Qwen-VL Vision)</span>
+                  </div>
+
+                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                    <span className="text-[10px] font-bold text-violet-400 uppercase block mb-0.5">
+                      👁️ Điểm Dừng Mắt (Visual Hook)
+                    </span>
+                    <p className="text-xs text-slate-200">
+                      {multimodalModalVid.visual_hook || "Góc quay cận cảnh sản phẩm"}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                    <span className="text-[10px] font-bold text-blue-400 uppercase block mb-0.5">
+                      🏠 Bối Cảnh / Không Gian (Setting)
+                    </span>
+                    <p className="text-xs text-slate-200">
+                      {multimodalModalVid.setting || "Không gian phòng thực tế"}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase block mb-0.5">
+                      🔤 Chữ Nổi Trên Màn Hình (On-Screen Text OCR)
+                    </span>
+                    <p className="text-xs text-slate-200 font-mono">
+                      {multimodalModalVid.on_screen_text || "Không có chữ nổi"}
+                    </p>
+                  </div>
+
+                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase">
+                      🎨 Phong Cách Khung Hình:
+                    </span>
+                    <span className="text-xs font-semibold text-emerald-300">
+                      {multimodalModalVid.visual_style || "Aesthetic Room Tour"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* DTC Angle & Winning Formula */}
+              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 mb-6">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                    <Target size={14} />
+                    <span>Trường Phái DTC & Công Thức Đề Xuất (Ad Angle & Brief)</span>
+                  </div>
+                  {renderAdAngleBadge(multimodalModalVid.ad_angle)}
+                </div>
+
+                <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                  <strong className="text-white block mb-1">💡 Công thức chuyển hóa (Winning Formula):</strong>
+                  {multimodalModalVid.winning_formula}
+                </div>
+              </div>
+
+              <button
+                onClick={() => setMultimodalModalVid(null)}
                 className="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-xl transition cursor-pointer"
               >
                 Đóng
