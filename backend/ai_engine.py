@@ -129,11 +129,15 @@ def build_fallback_review(video, keyword, comment_insight=None):
 
     ad_angle = classify_ad_angle(caption=caption, comments_text=comment_details)
     hook_desc = f"{hook_type}: Opening with '{caption[:75]}...' to capture viewer attention within 3 seconds."
-    viral_desc = f"Đạt {views:,} views và {saves:,} lượt lưu ({comments:,} bình luận) nhờ giá trị tham khảo decor thực tế.{top_topics_str}{comment_details}"
+    viral_desc = f"Đạt {views:,} views và {saves:,} lượt lưu ({comments:,} bình luận) nhờ giá trị tham khảo thực tế cho người tìm kiếm '{keyword}'.{top_topics_str}{comment_details}"
 
     viral_score = min(98.0, max(50.0, float(video.get("score") or 75.0)))
-    hook_score = round(min(98.0, viral_score * 1.05), 1)
-    conv_score = round(min(95.0, viral_score * 0.95), 1)
+    # Hook Score: based on engagement rate (interaction quality) - higher engagement = better hook
+    eng_rate = (likes + comments) / max(views, 1) * 100
+    hook_score = round(min(98.0, max(30.0, eng_rate * 8.0)), 1)  # 12.5% engagement → 100 score
+    # Conversion Score: based on save-to-view ratio (purchase intent proxy)
+    save_rate = saves / max(views, 1) * 100
+    conv_score = round(min(95.0, max(25.0, save_rate * 50.0)), 1)  # 2% save rate → 100 score
 
     return {
         "video_id": video.get("video_id"),
@@ -228,8 +232,8 @@ def generate_concepts_and_briefs(keyword, top_videos):
         for q in ins.get("buying_intent", [])[:2]:
             all_questions.append(q.get("text", ""))
 
-    obj_str = ", ".join(all_objections[:4]) or "Is it too plastic / artificial? Where to find a matching planter?"
-    q_str = ", ".join(all_questions[:4]) or "Where is the link? How much does it cost?"
+    obj_str = ", ".join(all_objections[:4]) or "Quality concerns, price hesitation"
+    q_str = ", ".join(all_questions[:4]) or "Where to buy? How much does it cost?"
 
     prompt = f"""
 Based on winning TikTok ad patterns for "{keyword}" and real customer comments:
@@ -261,66 +265,69 @@ Return pure JSON:
     if data and isinstance(data, dict) and "concepts" in data and "briefs" in data:
         return data["concepts"], data["briefs"]
 
-    # High quality DTC templates addressing real comment feedback
+    # Dynamic DTC templates using actual keyword and comment data (no hardcoded niche)
+    obj_display = obj_str if obj_str != "Where to find a matching planter?" else "quality concerns, shipping time"
+    q_display = q_str if q_str != "How much does it cost?" else "pricing, availability"
+
     concepts = [
         {
             "title": f"The '{keyword.title()}' Reality Check (Directly Answering Comment Doubts)",
-            "hook": f"Everyone in my comments asked if this {keyword} looks plastic in real life. Let's look up close...",
-            "angle": "Objection-Buster & Honest Macro Zoom",
+            "hook": f"Everyone in my comments asked about {keyword}. Let me show you the honest truth up close...",
+            "angle": "Objection-Buster & Honest Close-Up Review",
             "shot_list": [
-                "0-3s: Macro lens on leaves & trunk texture, showing natural veining and non-shiny finish",
-                "3-8s: Sunlight test near the window to prove zero artificial glare",
-                "8-14s: Showing the planter pot setup (addressing 'where is the pot from?')",
-                "14-20s: Final styled setup and bio link CTA"
+                f"0-3s: Extreme close-up revealing real product quality/texture of {keyword}",
+                f"3-8s: Addressing the #1 customer concern: '{obj_display.split(',')[0].strip()}'",
+                f"8-14s: Real-life context showing the product in use/in situ",
+                "14-20s: Final verdict + bio link CTA with urgency"
             ]
         },
         {
-            "title": f"Room Makeover on a Budget: {keyword.title()} + Styled Planter",
-            "hook": f"The one £40 home decor upgrade that made my space look like a luxury hotel.",
-            "angle": "Aesthetic Aspirations & Complete Bundle Solution",
+            "title": f"Budget-Friendly {keyword.title()} Upgrade That Looks Premium",
+            "hook": f"The one affordable upgrade that completely transformed my setup. Here's what I got...",
+            "angle": "Aesthetic Aspirations & Smart Shopper Value",
             "shot_list": [
-                "0-3s: Empty, dull corner in room with dramatic text overlay",
-                "3-7s: Unboxing and fluffing branches satisfying ASMR",
-                "7-12s: Corner styled with pot and warm accent lighting",
-                "12-18s: Before and After side-by-side split screen"
+                "0-3s: Before shot — plain/boring setup with dramatic text overlay",
+                f"3-7s: Unboxing {keyword} with satisfying ASMR reveal",
+                "7-12s: Styled setup showing the premium transformation",
+                "12-18s: Before and After side-by-side split screen + price reveal"
             ]
         },
         {
-            "title": f"Zero-Maintenance Convenience: Real vs Faux {keyword.title()}",
-            "hook": f"I calculated how much money I saved switching to a faux tree after killing 3 real ones.",
-            "angle": "Problem-Solution & Zero Maintenance",
+            "title": f"Why I Switched to This {keyword.title()} (And Never Looked Back)",
+            "hook": f"I spent way too much on alternatives before discovering this. Here's my honest take...",
+            "angle": "Problem-Solution & Personal Testimony",
             "shot_list": [
-                "0-3s: Dead brown plant leaves falling, creator sighing",
-                "3-8s: Introducing the lifelike faux replacement",
-                "8-14s: Close up details: realistic trunk texture, natural foliage",
-                "14-20s: 'Never water again' punchy takeaway"
+                "0-3s: Creator showing frustration with previous alternatives",
+                f"3-8s: Introducing {keyword} as the game-changing solution",
+                "8-14s: Close-up details proving quality and value",
+                "14-20s: Strong emotional takeaway + CTA"
             ]
         }
     ]
 
     briefs = [
         {
-            "title": f"{keyword.title()} Realism & Quality Proof UGC Ad",
-            "objective": "Eliminate buyer hesitation regarding plastic quality and drive CTR > 2.8%",
-            "target_audience": "Homeowners & apartment renters looking for easy, stylish interior upgrades.",
-            "script": "[0-3s Visual: Extreme macro shot of foliage, fingers feeling texture] Creator: 'If you're scared of buying faux plants online because they look cheap and shiny, watch this.' [3-10s Visual: Natural sunlight panning shot] Creator: 'Notice how the leaves have a soft matte finish and natural color variations. Even up close, you can't tell it's fake.' [10-18s Visual: Panning out to styled room] Creator: 'And for everyone asking about the terracotta planter, I linked both right in my bio with a bundle discount!'",
+            "title": f"{keyword.title()} Quality Proof & Objection Killer UGC Ad",
+            "objective": f"Eliminate buyer hesitation about {keyword} and drive CTR > 2.8%",
+            "target_audience": f"People actively searching for or interested in {keyword} on TikTok.",
+            "script": f"[0-3s Visual: Close-up product shot] Creator: 'If you've been hesitant about buying {keyword} online, watch this.' [3-10s Visual: Detailed quality showcase] Creator: 'The #1 comment I get is about {obj_display.split(',')[0].strip()}. Let me address that right now...' [10-18s Visual: Product in real-life context] Creator: 'For everyone asking {q_display.split(',')[0].strip()}, I linked everything in my bio!'",
             "guidelines": [
-                "Shoot in bright natural morning daylight (no harsh artificial yellow lights)",
-                "Include organic ASMR sounds when fluffing branches",
-                "Directly answer the comment question in the first 3 seconds",
+                "Shoot in bright natural daylight for authentic feel",
+                "Directly address the top customer objection in the first 3 seconds",
+                f"Include real close-up details of {keyword} to build trust",
                 "Keep video length strictly between 16 to 22 seconds"
             ]
         },
         {
-            "title": f"The Viral Amazon / TikTok Shop {keyword.title()} Find",
-            "objective": "Spark viral comment debate on realism and drive high save rates",
-            "target_audience": "Bargain interior lovers, decor enthusiasts, busy professionals.",
-            "script": "[0-3s Visual: Creator pointing camera at tree] Creator: 'Would you believe me if I told you this tree is completely fake?' [3-10s Visual: Extreme macro shots of the branches and pot] Creator: 'Everyone who visits thinks it's real and asks for watering tips. The trick is how you shape the branches when it arrives.' [10-17s Visual: Styling with basket and moss] Creator: 'Grab it before it sells out again—tap below!'",
+            "title": f"The Viral TikTok {keyword.title()} Find",
+            "objective": f"Spark viral engagement and high save rates for {keyword}",
+            "target_audience": f"TikTok users interested in {keyword}, deal hunters, and impulse buyers.",
+            "script": f"[0-3s Visual: Creator with product] Creator: 'This might be the best purchase I've made all year.' [3-10s Visual: Detailed showcase and comparison] Creator: 'And before you ask — yes, the quality is insane for the price. Let me show you exactly what you get.' [10-17s Visual: Product in context/styled] Creator: 'Grab it before it sells out again—tap the link below!'",
             "guidelines": [
                 "Fast-paced visual cuts every 1.5 to 2.5 seconds",
-                "Use trending ambient background audio",
-                "Feature the unboxing and pot placement clearly",
-                "Include prominent CTA pointing to the anchor link"
+                "Use trending background audio or authentic voiceover",
+                f"Feature the unboxing and first impression of {keyword} clearly",
+                "Include prominent CTA pointing to the bio link"
             ]
         }
     ]
@@ -448,24 +455,28 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ dạng JSON thuần (gắn kết c
     data = extract_json(llm_resp)
 
     if not data or not isinstance(data, dict):
-        # High quality empirical fallback synthesis
+        # Dynamic data-driven fallback synthesis (works for ANY niche)
+        top_topic_name = top_topics[0]['topic'] if top_topics else 'Chủ đề phổ biến nhất'
+        top_objection_text = top_objections[0]['text'] if top_objections else 'Chất lượng sản phẩm'
+        top_desire_text = buying_desires[0]['text'] if buying_desires else 'Hỏi link mua hàng'
+
         data = {
             "summary": (
                 f"Ngách '{keyword}' sở hữu dung lượng thị trường mạnh với hơn {total_views:,} views tích lũy từ {len(videos)} video hàng đầu. "
                 f"Dựa trên {len(raw_comments):,} bình luận thực tế, mối quan tâm lớn nhất của khách hàng tập trung vào [{topics_str}]. "
-                f"Khán giả có tỷ lệ hỏi mua/xin link rất cao ({desires_str[:90]}...), nhưng trở ngại lớn nhất là tâm lý e ngại chất liệu giả và giá thành. "
+                f"Khán giả có tỷ lệ hỏi mua/xin link rất cao ({desires_str[:90]}...), nhưng trở ngại lớn nhất là tâm lý e ngại chất lượng thực tế so với hình ảnh quảng cáo. "
                 f"Thương hiệu biết cách bẻ gãy rào cản này ngay trong 3 giây đầu sẽ tối đa hóa tỷ lệ chuyển đổi."
             ),
             "viral_triggers": [
-                f"Cận cảnh chi tiết lá & cành ({top_topics[0]['topic'] if top_topics else 'Độ chân thực'}): Quay macro dưới ánh nắng cửa sổ chứng minh độ sần matte, triệt tiêu cảm giác bóng nhựa.",
-                "Giải pháp trọn gói (All-in-one bundle): Không chỉ bán cây trần mà hướng dẫn kèm chậu mây/gốm + rêu phủ gốc để tạo thành phẩm hoàn chỉnh.",
-                "Tương phản chi phí & công sức: So sánh việc sở hữu cây nhân tạo bền đẹp 5 năm với việc cây thật bị úa lá, tưới tiêu phức tạp."
+                f"Close-up chứng minh chất lượng ({top_topic_name}): Quay cận cảnh chi tiết sản phẩm dưới ánh sáng tự nhiên để chứng minh chất lượng thực tế, triệt tiêu hoài nghi.",
+                f"Giải pháp trọn gói (All-in-one bundle): Không chỉ bán sản phẩm đơn lẻ mà hướng dẫn kèm phụ kiện để tạo trải nghiệm hoàn chỉnh cho khách hàng.",
+                f"Social proof thực tế: Sử dụng phản hồi tích cực từ comment thực ('{top_desire_text[:60]}') làm bằng chứng thuyết phục."
             ],
             "friction_solutions": [
-                f"Hóa giải nghi vấn chất lượng ('{top_objections[0]['text'] if top_objections else 'Sợ lá nhìn giả'}'): Cho người xem thấy độ dẻo của cành và zoom 4K vào cuống lá ở giây 2.",
-                f"Giải quyết nhu cầu mua sắm tức thì ('{buying_desires[0]['text'] if buying_desires else 'Hỏi link mua'}'): Ghim sản phẩm rõ ràng kèm hướng dẫn chọn size (6ft/7ft/8ft) theo độ cao trần nhà."
+                f"Hóa giải nghi vấn chất lượng ('{top_objection_text[:60]}'): Cho người xem thấy sản phẩm thực tế ngay từ giây thứ 2 của video.",
+                f"Giải quyết nhu cầu mua sắm tức thì ('{top_desire_text[:60]}'): Ghim sản phẩm rõ ràng kèm hướng dẫn chọn mẫu/size phù hợp."
             ],
-            "winning_blueprint": "[0-3s Hook] 'Nếu bạn đang tính bỏ $100+ mua cây ô liu giả thì xem hết 10 giây này trước đã...' [3-8s Objection Killer] Chạm tay vào lá, test độ lóa sáng trực tiếp trước cửa sổ để chứng minh không hề bóng nhựa. [8-15s Styling Trick] Chia sẻ mẹo uốn cành hình chữ S và bỏ vào chậu gốm rải sỏi/rêu. [15-20s Direct CTA] 'Đang có deal ưu đãi kèm link trong bio cho 50 người đầu tiên!'"
+            "winning_blueprint": f"[0-3s Hook] 'Nếu bạn đang tìm {keyword} thì xem hết 10 giây này trước đã...' [3-8s Objection Killer] Close-up sản phẩm, chứng minh chất lượng trực tiếp. [8-15s Styling/Demo] Hướng dẫn sử dụng/setup sản phẩm thực tế. [15-20s Direct CTA] 'Link trong bio — đang có deal cho người xem TikTok!'"
         }
 
     # Embed Audio Intelligence & Voice of Customer dataset
@@ -591,44 +602,53 @@ Hãy xuất ra bản ĐÁNH GIÁ TỔNG THỂ ĐẲNG CẤP CHIẾN LƯỢC DTC 
             print(f"[AI Engine] Gemini API call notice: {ge}")
 
     if not gemini_data or not isinstance(gemini_data, dict):
-        # Built-in Antigravity Gemini 3.8 Flash High Deep Strategic Reasoning synthesis
+        # Dynamic data-driven Gemini fallback synthesis (works for ANY niche)
+        top_creator_views = f"@{top_views_vids[0]['creator']} ({top_views_vids[0]['views']:,} views)" if top_views_vids else "top creator"
+        top_creator_saves = f"@{top_saves_vids[0]['creator']} ({top_saves_vids[0]['saves']:,} saves)" if top_saves_vids else "top saver"
+        top_objection_text = top_objections[0]['text'] if top_objections else 'Chất lượng sản phẩm'
+        top_desire_text = buying_desires[0]['text'] if buying_desires else 'Hỏi link mua hàng'
+        save_rate = round((total_saves / total_views * 100), 2) if total_views > 0 else 0
+
         gemini_data = {
             "summary": (
                 f"Ngách '{keyword}' sở hữu dung lượng tiếp cận khổng lồ với hơn {total_views:,} lượt xem tích lũy và {total_saves:,} lượt lưu từ {total_vids} video thực tế trong database. "
-                f"Bóc tách 3,800+ bình luận thực tế bộc lộ một chân lý bán hàng mang tính bước ngoặt: Khách hàng KHÔNG CHỈ MUA CÂY, họ đang mua 'TRẢI NGHIỆM BIẾN ĐỔI GÓC PHÒNG COZY'. "
-                f"Đột biến viral lớn nhất đến từ việc bài trí cây hoàn chỉnh kèm chậu gốm, rêu phủ và đèn spotlight rọi ấm áp ban đêm (tiêu biểu như video của @markykee0 đạt 11,573 saves và @amazonhome đạt 11,700 saves - tỷ lệ save/view lên tới 1.6%, cao gấp 10 lần mức trung bình của TikTok). "
-                f"Rào cản mua hàng lớn nhất tập trung vào nỗi sợ 'lá bóng nhựa rẻ tiền online' và tâm lý e ngại độ bền khi nhà có trẻ nhỏ/thú cưng. Thương hiệu giải quyết trọn gói combo này sẽ tạo ra rào cản cạnh tranh tuyệt đối."
+                f"Phân tích {len(raw_comments):,} bình luận thực tế bộc lộ insight quan trọng: Khách hàng đang tìm kiếm trải nghiệm toàn diện chứ không chỉ mua sản phẩm đơn lẻ. "
+                f"Video nổi bật nhất ({top_creator_views}) cho thấy nội dung close-up chứng minh chất lượng thực tế là đòn bẩy viral mạnh nhất. "
+                f"Tỷ lệ save/view trung bình đạt {save_rate}%, cho thấy ý định mua hàng rất cao. "
+                f"Rào cản lớn nhất: '{top_objection_text[:80]}'. Thương hiệu giải quyết trực tiếp rào cản này trong 3 giây đầu video sẽ tạo ra lợi thế cạnh tranh tuyệt đối."
             ),
             "viral_triggers": [
-                "Hiệu ứng Ánh sáng & Đèn rọi ban đêm (Cozy Spotlight Magic): Video đạt hơn 11,500 saves nhờ góc quay bật đèn spotlight rọi ấm từ gốc cây lên tường trong phòng tối. Khán giả comment dồn dập đòi link đèn và cây cùng lúc, biến góc phòng thành khách sạn boutique.",
-                "Bộ 3 Hoàn Hảo (Cây + Chậu Gốm Terracotta + Rêu Khô): Khán giả coi cây trần trong chậu nhựa đen là 'chưa hoàn thiện'. Các video hướng dẫn 'fluffing & styling' (uốn cành theo hình chữ Y và rải rêu khô phủ gốc) đạt tỷ lệ lưu cao gấp 4 lần video review thông thường.",
-                "Chứng minh vân lá Matte dưới ánh sáng tự nhiên (Macro Zoom 0-3s): Chạm tay sờ gân lá và mặt sau lá có màu phấn xám bạc chân thực ngay giây thứ 2 để đập tan định kiến 'ghét cây giả nhưng mê phong cách này' (comment đạt 109 likes)."
+                f"Close-up chất lượng sản phẩm thực tế: Video của {top_creator_views} đạt tỷ lệ lưu cao nhờ chứng minh chất lượng trực tiếp trước camera. Khán giả muốn thấy sản phẩm thật, không phải hình ảnh studio.",
+                f"Complete solution showcase: Các video hướng dẫn sử dụng/setup hoàn chỉnh đạt tỷ lệ lưu cao gấp nhiều lần so với video review đơn thuần. {top_creator_saves} minh chứng cho chiến lược này.",
+                f"Social proof từ comment thực: Sử dụng phản hồi khách hàng thật ('{top_desire_text[:60]}') làm hook và bằng chứng thuyết phục trong video."
             ],
             "friction_solutions": [
-                "Bẻ gãy rào cản 'Sợ lá bóng nhựa rẻ tiền online': Quay cận cảnh zoom 3x dưới ánh sáng ban ngày tự nhiên, lấy tay bẻ cong nhánh cây nhẹ nhàng chứng minh độ dẻo và lớp finish nhám mờ không bóng chói.",
-                "Bẻ gãy sự lúng túng 'Mua về không biết cắm chậu gì': Làm video 'Styling Guide' hướng dẫn bẻ xòe nhánh con theo hình chữ Y, đặt vào chậu gốm terracotta và rải đúng 200g rêu khô che đế xi măng.",
-                "Hóa giải lo ngại độ bền & trẻ nhỏ/thú cưng: Thử nghiệm thực tế rung lắc cành cây chứng minh đế chậu nặng chắc chắn, cành lá ép nhiệt không thể rụng khi chạm vào."
+                f"Bẻ gãy rào cản #{1} ('{top_objection_text[:60]}'): Quay cận cảnh sản phẩm dưới ánh sáng tự nhiên, chứng minh chất lượng trực tiếp trước camera ngay từ giây đầu tiên.",
+                f"Giải quyết nhu cầu mua sắm tức thì ('{top_desire_text[:60]}'): Ghim link sản phẩm rõ ràng, kèm hướng dẫn chọn mẫu/variant phù hợp nhu cầu cá nhân.",
+                f"Xây dựng niềm tin bằng social proof: Đọc/hiện comment thực của khách hàng đã mua trong video để tăng tỷ lệ chuyển đổi."
             ],
             "winning_blueprint": (
-                "[0-3s Visual Shock / Hook] Bật công tắc đèn spotlight mini rọi vào cây ô liu trong góc phòng tối, tạo không gian ấm áp sang trọng như khách sạn 5 sao. Lời thoại KOC: 'Chiếc cây giả 1 triệu đã cứu rỗi cả góc phòng khách buồn tẻ của mình...'\n"
-                "[3-8s Proof / Objection Killer] Zoom máy quay 5cm vào gân lá và trái ô liu dưới ánh sáng cửa sổ, tay vuốt qua lá: 'Ai đến nhà cũng tưởng cây thật vì lá có lớp phấn nhám mờ, không hề bị bóng nhựa như mấy loại rẻ tiền.'\n"
-                "[8-14s Styling Secret] Bật mí mẹo setup: 'Bí mật là khi nhận về nhớ bẻ xòe các nhánh con theo hình chữ Y, đặt vào một chiếc chậu gốm và rải chút rêu khô lên trên đế xi măng.'\n"
-                "[14-20s High Converting CTA] 'Cả cây ô liu và chiếc đèn spotlight rọi gốc này mình đều ghim ở giỏ hàng góc trái, đang có flash sale kèm voucher giảm 25% nhé!'"
+                f"[0-3s Visual Shock / Hook] Close-up ấn tượng sản phẩm {keyword} trong bối cảnh đẹp mắt. KOC: 'Sản phẩm này đã thay đổi hoàn toàn trải nghiệm của mình...'\n"
+                f"[3-8s Proof / Objection Killer] Zoom chi tiết chất lượng sản phẩm dưới ánh sáng tự nhiên, tay chạm/test trực tiếp: 'Nhiều bạn lo ngại {top_objection_text[:40]}. Để mình show cho xem...'\n"
+                f"[8-14s Demo / Usage Secret] Hướng dẫn sử dụng/setup tối ưu: 'Bí quyết để có kết quả tốt nhất là...'\n"
+                f"[14-20s High Converting CTA] 'Link sản phẩm mình ghim ở giỏ hàng/bio, đang có deal giảm giá cho người xem TikTok!'"
             )
         }
 
     # Embed Audio Intelligence & Voice of Customer dataset
     top_audio_type = audio_summary["distribution"][0]["label"] if audio_summary.get("distribution") else "🎙️ Voiceover (Giọng Thuyết Minh)"
+    top_audio_pct = audio_summary["distribution"][0]["percentage"] if audio_summary.get("distribution") else 0
+    top_audio_views = audio_summary["distribution"][0].get("total_views", 0) if audio_summary.get("distribution") else 0
     gemini_data["audio_strategy"] = {
         "dominant_style": (
-            f"{top_audio_type} chiếm {audio_summary['distribution'][0]['percentage']}% với {audio_summary['distribution'][0]['total_views']:,} views"
+            f"{top_audio_type} chiếm {top_audio_pct}% với {top_audio_views:,} views"
             if audio_summary.get("distribution") else "🎙️ Voiceover (Giọng Thuyết Minh) chiếm ưu thế áp đảo"
         ),
         "winning_audio_formula": (
-            "Chiến lược âm thanh 'Voice-First Hybrid': Trong 3-4 giây đầu, tuyệt đối không dùng nhạc trend ầm ĩ; hãy dùng Spoken Hook dứt khoát ('Chiếc cây giả cứu rỗi căn phòng...') kèm âm thanh gõ nhẹ (Foley unboxing/fluffing). Từ giây thứ 4 trở đi, fade-in một đoạn nhạc LoFi chill không lời với âm lượng -14 LUFS để dẫn dắt cảm xúc người xem đến lời kêu gọi giỏ hàng."
+            f"Chiến lược âm thanh 'Voice-First Hybrid': Trong 3-4 giây đầu, dùng Spoken Hook dứt khoát kèm âm thanh thao tác Foley (unboxing/demo). Từ giây thứ 4, fade-in nhạc nền nhẹ không lời để dẫn dắt cảm xúc đến CTA chốt đơn."
         ),
         "recommendation": (
-            "Dữ liệu cho thấy các video có Voiceover thuyết minh chân thực đạt số lượt lưu (Saves) trung bình gấp 3 lần so với video thuần nhạc nền. Nếu làm affiliate hoặc bán hàng TikTok Shop, hãy ưu tiên kịch bản nói chuyện gần gũi thay vì chỉ ghép nhạc trend."
+            f"Dữ liệu {total_vids} video trong ngách '{keyword}' cho thấy video có Voiceover thuyết minh chân thực đạt tỷ lệ lưu (Saves) cao hơn đáng kể so với video thuần nhạc nền. Ưu tiên kịch bản nói chuyện gần gũi."
         ),
         "distribution": audio_summary.get("distribution", []),
         "top_sounds": audio_summary.get("top_sounds", [])

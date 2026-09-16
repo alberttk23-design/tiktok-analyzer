@@ -257,10 +257,20 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
                     sound_original = 1 if bool(music_obj.get("original", False)) else 0
 
                     caption_lower = caption.lower()
-                    if "asmr" in caption_lower or "asmr" in sound_title.lower():
+                    title_lower = sound_title.lower()
+                    if "asmr" in caption_lower or "asmr" in title_lower:
                         sound_type = "asmr"
                     elif sound_original:
-                        sound_type = "voiceover"
+                        # 'original sound' could be voiceover, ambient, music, etc.
+                        # Use heuristics: if creator name is in sound_author, likely voiceover
+                        # Also check caption for voiceover indicators
+                        voiceover_signals = ["review", "honest", "unboxing", "haul", "talking", "story", "pov", "rant", "opinion", "thoughts"]
+                        if any(sig in caption_lower or sig in title_lower for sig in voiceover_signals):
+                            sound_type = "voiceover"
+                        elif duration >= 15:
+                            sound_type = "voice_with_music"  # Longer originals likely have speaking + music
+                        else:
+                            sound_type = "original_sound"  # Short originals - ambiguous, mark as original
                     elif sound_title:
                         sound_type = "voice_with_music" if duration >= 15 else "music_only"
                     else:

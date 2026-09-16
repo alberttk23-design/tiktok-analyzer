@@ -190,21 +190,30 @@ def get_master_analysis_endpoint(keyword: Optional[str] = Query(None), engine: O
 @app.get("/api/audio-summary")
 def get_audio_summary_endpoint(keyword: Optional[str] = Query(None)):
     """Get aggregated audio intelligence (sound type distribution, top sounds) for a keyword/niche."""
-    kw = keyword or db.get_latest_keyword()
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
     return db.get_niche_audio_summary(kw)
 
 
 @app.get("/api/audio-intelligence")
 def get_audio_intelligence_endpoint(keyword: Optional[str] = Query(None)):
     """Get full-featured Sound & Voice Intelligence (leaderboard, voice corpus, 4 frameworks)."""
-    kw = keyword or db.get_latest_keyword()
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
     return db.get_full_audio_intelligence(kw)
 
 
 @app.get("/api/voc-deep")
 def get_voc_deep_endpoint(keyword: Optional[str] = Query(None)):
     """Get full-featured 6-Pillar Consumer Psychology & VoC Intelligence."""
-    kw = keyword or db.get_latest_keyword()
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
     import backend.voc_engine as voc_engine
     return voc_engine.analyze_voc_deep(kw)
 
@@ -584,7 +593,7 @@ def export_csv(keyword: Optional[str] = Query(None)):
     reviews = {r.get("video_id"): r for r in data.get("reviews", [])}
     insights = data.get("comment_insights", {})
     master = data.get("master_analysis") or {}
-    master_summary = master.get("summary") or "Thị trường có dung lượng lớn, người mua tìm kiếm tính thẩm mỹ cao nhưng băn khoăn về độ chân thực."
+    master_summary = master.get("summary") or f"Chưa có phân tích tổng thể cho ngách '{kw}'. Vui lòng chạy Master AI Analysis."
 
     output = io.StringIO()
     output.write("\ufeff")
@@ -666,9 +675,15 @@ def export_csv(keyword: Optional[str] = Query(None)):
 
 @app.get("/api/keyframe/{filename}")
 def get_keyframe(filename: str):
-    file_path = BASE_DIR / "data" / "keyframes" / filename
+    # Security: sanitize filename to prevent path traversal
+    safe_name = Path(filename).name  # Strip any directory components
+    file_path = BASE_DIR / "data" / "keyframes" / safe_name
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="Keyframe not found")
+    # Double-check the resolved path is within keyframes directory
+    keyframes_dir = (BASE_DIR / "data" / "keyframes").resolve()
+    if not str(file_path.resolve()).startswith(str(keyframes_dir)):
+        raise HTTPException(status_code=403, detail="Access denied")
     return FileResponse(str(file_path))
 
 

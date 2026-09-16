@@ -9,8 +9,10 @@ DB_PATH = BASE_DIR / "data" / "tiktok.db"
 
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -938,17 +940,8 @@ def get_results_by_keyword(keyword=None):
     import backend.voc_engine as voc_engine
     voc_deep = voc_engine.analyze_voc_deep(keyword)
 
-    # Auto-backfill reviews for any videos that were interrupted or crawled without analysis
-    existing_reviewed_vids = {r.get("video_id") for r in reviews}
-    missing_vids = [v for v in videos if v.get("video_id") not in existing_reviewed_vids]
-    if missing_vids:
-        import backend.ai_engine as ai_engine
-        for v in missing_vids:
-            vid = v.get("video_id")
-            ins = insights_map.get(vid)
-            fb = ai_engine.build_fallback_review(v, keyword, comment_insight=ins)
-            save_review(fb)
-            reviews.append(fb)
+    # Note: Review backfilling now happens in the crawl/analyze pipeline (api.py execute_pipeline)
+    # to avoid side-effect writes during GET requests.
 
     return {
         "keyword": keyword,
