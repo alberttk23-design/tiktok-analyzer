@@ -326,11 +326,13 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 print(f"[Crawler] Skipping vector '{query_str}' because video cards failed to render after F5 retries.")
                 continue
 
-            # Focus directly on the video grid container so mouse/keyboard events scroll the grid
+            # Focus safely on page body without clicking on video cards
             try:
-                page.mouse.move(700, 500)
-                page.mouse.click(700, 500)
-                page.wait_for_timeout(300)
+                page.evaluate("() => document.body.focus()")
+                # Safe click on top margin / whitespace (never on video thumbnails)
+                page.mouse.click(100, 100)
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(200)
             except Exception:
                 pass
 
@@ -347,13 +349,22 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 if len(discovered_new_videos) >= target_count:
                     break
 
-                # 1. Multi-step progressive human-like wheel scroll (flicks) directly inside grid
-                page.mouse.move(random.randint(650, 750), random.randint(450, 550))
+                # Guard: if TikTok ever opens a video detail modal, dismiss it immediately to keep browsing the search list
+                if "/video/" in page.url or page.evaluate("() => Boolean(document.querySelector('[data-e2e=\"modal-close-inner-button\"]'))"):
+                    page.keyboard.press("Escape")
+                    page.evaluate("""() => {
+                        const closeBtn = document.querySelector('[data-e2e="modal-close-inner-button"], button[aria-label="Close"]');
+                        if (closeBtn) closeBtn.click();
+                    }""")
+                    page.wait_for_timeout(200)
+
+                # 1. Multi-step progressive wheel scroll in search results grid margin
+                page.mouse.move(random.randint(200, 350), random.randint(300, 500))
                 for _ in range(3):
-                    page.mouse.wheel(0, random.randint(500, 850))
+                    page.mouse.wheel(0, random.randint(600, 950))
                     page.wait_for_timeout(random.randint(150, 250))
 
-                # 2. Key navigation down
+                # 2. Key navigation down on search grid
                 page.keyboard.press("PageDown")
                 page.keyboard.press("PageDown")
                 page.wait_for_timeout(random.randint(200, 350))
