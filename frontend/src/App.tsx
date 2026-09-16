@@ -150,6 +150,7 @@ function App() {
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [runningMasterAI, setRunningMasterAI] = useState(false);
+  const [crawlLimit, setCrawlLimit] = useState<number>(20);
 
   // Video-specific comment crawl state
   const [crawlingCommentVid, setCrawlingCommentVid] = useState<string | null>(null);
@@ -235,7 +236,7 @@ function App() {
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim(), limit: 20 }),
+        body: JSON.stringify({ keyword: keyword.trim(), limit: crawlLimit }),
       });
 
       if (res.ok) {
@@ -246,7 +247,7 @@ function App() {
           keyword: keyword.trim(),
           status: "started",
           progress: 5,
-          message: "Kiểm tra lịch sử SQLite & cào 20 video mới...",
+          message: `Kiểm tra lịch sử SQLite & cào ${crawlLimit} video mới (Multi-Vector)...`,
           new_videos_count: 0,
         });
 
@@ -436,7 +437,7 @@ ${data.master_analysis.summary}\n`;
 
         {/* Search & Action Box */}
         <div className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-4 md:p-6 shadow-2xl mb-6 backdrop-blur-md">
-          <div className="flex flex-col md:flex-row gap-3">
+          <div className="flex flex-col md:flex-row gap-3 items-stretch">
             <div className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl px-5 py-3.5 flex items-center gap-3 focus-within:border-violet-500 transition">
               <Search className="text-slate-400" size={20} />
               <input
@@ -449,10 +450,27 @@ ${data.master_analysis.summary}\n`;
               />
             </div>
 
+            {/* Target Count Selector */}
+            <div className="bg-slate-950 border border-slate-800 rounded-2xl px-3 py-2 flex items-center gap-2 justify-between">
+              <span className="text-xs text-slate-400 font-medium px-1 whitespace-nowrap">Mục tiêu:</span>
+              <select
+                value={crawlLimit}
+                onChange={(e) => setCrawlLimit(Number(e.target.value))}
+                disabled={loading}
+                aria-label="Target crawl count"
+                className="bg-slate-900 border border-slate-700 text-violet-300 font-semibold text-xs md:text-sm rounded-xl px-3 py-2 outline-none cursor-pointer hover:border-violet-500 transition"
+              >
+                <option value={20}>+20 video (Sprint)</option>
+                <option value={50}>+50 video (Sâu)</option>
+                <option value={100}>+100 video (Toàn diện)</option>
+                <option value={200}>+200 video (Đại quy mô)</option>
+              </select>
+            </div>
+
             <button
               onClick={handleAnalyze}
               disabled={loading}
-              className="bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 hover:opacity-95 text-white font-semibold px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2.5 transition shadow-lg shadow-purple-600/25 disabled:opacity-50 cursor-pointer text-sm md:text-base"
+              className="bg-gradient-to-r from-pink-500 via-purple-600 to-indigo-600 hover:opacity-95 text-white font-semibold px-7 py-3.5 rounded-2xl flex items-center justify-center gap-2.5 transition shadow-lg shadow-purple-600/25 disabled:opacity-50 cursor-pointer text-sm md:text-base whitespace-nowrap"
             >
               {loading ? (
                 <>
@@ -462,7 +480,7 @@ ${data.master_analysis.summary}\n`;
               ) : (
                 <>
                   <Play size={18} />
-                  <span>Cào Tiếp 20 Video Mới (Né Trùng)</span>
+                  <span>Cào Tiếp {crawlLimit} Video Mới (Né Trùng)</span>
                 </>
               )}
             </button>

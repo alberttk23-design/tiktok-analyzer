@@ -79,19 +79,25 @@ def generate_niche_search_queries(base_keyword: str) -> list:
     """
     kw = base_keyword.strip()
     modifiers = [
-        kw,                   # Base query first (e.g. "faux olive tree")
-        f"amazon {kw}",       # Top shopping / storefront intent
-        f"{kw} review",       # Buyer review & UGC proof
-        f"{kw} styling",      # Home decor styling & setup
-        f"realistic {kw}",    # Realism proof & quality comparison
-        f"{kw} finds",        # Viral finds
-        f"{kw} unboxing",     # Product unboxing
-        f"best {kw}",         # Best recommendations
-        f"{kw} target",       # Alternative retail
-        f"{kw} decor",        # Room decor setup
-        f"affordable {kw}",   # Budget / deal seekers
-        f"{kw} tiktok shop",  # TikTok Shop affiliate showcase
-        f"diy {kw}"           # DIY & craftsmanship
+        kw,                         # Base query first (e.g. "faux olive tree")
+        f"amazon {kw}",             # Top shopping / storefront intent
+        f"{kw} review",             # Buyer review & UGC proof
+        f"{kw} styling",            # Home decor styling & setup
+        f"realistic {kw}",          # Realism proof & quality comparison
+        f"{kw} finds",              # Viral finds
+        f"{kw} unboxing",           # Product unboxing
+        f"best {kw}",               # Best recommendations
+        f"honest {kw} review",      # Critical & authentic reviews
+        f"{kw} target",             # Alternative retail
+        f"{kw} decor",              # Room decor setup
+        f"affordable {kw}",         # Budget / deal seekers
+        f"{kw} tiktok shop",        # TikTok Shop affiliate showcase
+        f"{kw} haul",               # Shopping hauls
+        f"{kw} aesthetic",          # Aesthetic / room transformation
+        f"{kw} must haves",         # Viral must haves
+        f"worth it {kw}",           # Buyer evaluation
+        f"{kw} comparison",         # Comparative tests
+        f"diy {kw}"                 # DIY & craftsmanship
     ]
     seen = set()
     result = []
@@ -222,7 +228,8 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 print(f"[Crawler] Vector navigation error for '{query_str}': {e}")
                 continue
 
-            max_scrolls_per_query = 15
+            # Scale scroll depth based on desired batch size (more scrolls if targeting 100-200)
+            max_scrolls_per_query = 28 if target_count >= 100 else (20 if target_count >= 50 else 15)
             consecutive_stagnant = 0
             last_total_seen = len(seen_in_session)
 
