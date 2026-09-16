@@ -72,10 +72,41 @@ def calculate_viral_score(views, likes, comments, reposts, saves):
     return round(engagement_rate, 6), score
 
 
+def generate_niche_search_queries(base_keyword: str) -> list:
+    """
+    Generate high-intent semantic query vectors for a product niche
+    to bypass TikTok's ~100 search result ceiling and discover hundreds of new videos.
+    """
+    kw = base_keyword.strip()
+    modifiers = [
+        kw,                   # Base query first (e.g. "faux olive tree")
+        f"amazon {kw}",       # Top shopping / storefront intent
+        f"{kw} review",       # Buyer review & UGC proof
+        f"{kw} styling",      # Home decor styling & setup
+        f"realistic {kw}",    # Realism proof & quality comparison
+        f"{kw} finds",        # Viral finds
+        f"{kw} unboxing",     # Product unboxing
+        f"best {kw}",         # Best recommendations
+        f"{kw} target",       # Alternative retail
+        f"{kw} decor",        # Room decor setup
+        f"affordable {kw}",   # Budget / deal seekers
+        f"{kw} tiktok shop",  # TikTok Shop affiliate showcase
+        f"diy {kw}"           # DIY & craftsmanship
+    ]
+    seen = set()
+    result = []
+    for m in modifiers:
+        clean = m.strip()
+        if clean and clean not in seen:
+            seen.add(clean)
+            result.append(clean)
+    return result
+
+
 def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
     """
-    Search TikTok for keyword, filter out existing URLs from DB history,
-    collect target_count new videos, fetch metadata, comments, score, and store to DB.
+    Search TikTok using Multi-Vector Query Expansion, filter out existing URLs from DB history,
+    collect target_count brand-new videos, fetch metadata, comments, score, and store to DB.
     """
     if job_id:
         db.update_job(job_id, status="crawling", progress=5, message=f"Loading history for '{keyword}'...")
@@ -83,12 +114,14 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
     existing_ids, existing_urls = db.get_existing_video_ids()
     print(f"[Crawler] Found {len(existing_ids)} existing videos in DB history.")
 
-    search_url = f"https://www.tiktok.com/search/video?q={quote(keyword)}"
+    query_vectors = generate_niche_search_queries(keyword)
+    print(f"[Crawler] Generated {len(query_vectors)} intelligent search vectors for niche '{keyword}': {query_vectors}")
+
     discovered_new_videos = {}  # vid -> video_record
     seen_in_session = set()
 
     if job_id:
-        db.update_job(job_id, status="crawling", progress=15, message=f"Opening TikTok stream for '{keyword}'...")
+        db.update_job(job_id, status="crawling", progress=12, message=f"Starting Multi-Vector Stream Crawler for '{keyword}'...")
 
     PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -98,7 +131,6 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
             try:
                 data = response.json()
                 items = data.get("item_list", []) or [e.get("item") for e in data.get("data", []) if e.get("item")]
-                print(f"[Crawler Stream] Intercepted batch with {len(items)} items from TikTok API.")
                 for item in items:
                     if not item or not isinstance(item, dict):
                         continue
@@ -137,7 +169,7 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                     discovered_new_videos[vid] = {
                         "video_id": vid,
                         "url": clean_url,
-                        "keyword": keyword,
+                        "keyword": keyword,  # All vectors pool under the parent niche keyword
                         "creator": creator,
                         "caption": caption,
                         "upload_date": upload_date,
@@ -165,80 +197,62 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
         page = context.new_page()
         page.on("response", handle_response)
 
-        try:
-            page.goto(search_url, timeout=60000)
-            page.wait_for_timeout(4000)
-        except Exception as e:
-            print(f"[Crawler] Page navigation error: {e}")
-
-        # Intelligent scroll loop: scroll until enough NEW videos are collected or end of search
-        max_scroll_rounds = 45
-        consecutive_stagnant = 0
-        last_total_seen = len(seen_in_session)
-
-        for scroll_idx in range(max_scroll_rounds):
+        # Traverse query vectors until target_count brand-new videos are discovered
+        for q_idx, query_str in enumerate(query_vectors):
             if len(discovered_new_videos) >= target_count:
                 print(f"[Crawler] Successfully reached target {target_count} brand-new videos!")
                 break
 
-            # Scroll using DOM scroll, mouse wheel, and keyboard
-            page.evaluate("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
-            page.mouse.wheel(0, 4000)
-            page.keyboard.press("PageDown")
-            page.keyboard.press("PageDown")
-            page.wait_for_timeout(2500)
-
-            current_total_seen = len(seen_in_session)
-            if current_total_seen == last_total_seen:
-                consecutive_stagnant += 1
-                if consecutive_stagnant >= 6:
-                    print(f"[Crawler] No new items incoming from TikTok API stream after {scroll_idx + 1} scrolls. Stopping.")
-                    break
-            else:
-                consecutive_stagnant = 0
-                last_total_seen = current_total_seen
+            search_url = f"https://www.tiktok.com/search?q={quote(query_str)}"
+            print(f"[Crawler] >>> Traversing Vector {q_idx + 1}/{len(query_vectors)}: '{query_str}' ({len(discovered_new_videos)}/{target_count} new found so far)")
 
             if job_id:
                 pct = 15 + min(40, int((len(discovered_new_videos) / target_count) * 40))
                 db.update_job(
                     job_id,
+                    status="crawling",
                     progress=pct,
-                    message=f"Scanned {current_total_seen} videos from TikTok. Found {len(discovered_new_videos)}/{target_count} brand-new videos..."
+                    message=f"Scanning vector '{query_str}' ({len(discovered_new_videos)}/{target_count} new videos found)..."
                 )
 
-        # Fallback for any DOM links if API was throttled
-        if len(discovered_new_videos) < target_count:
-            dom_links = page.locator("a[href*='/video/']")
-            d_count = dom_links.count()
-            for i in range(d_count):
+            try:
+                page.goto(search_url, timeout=45000)
+                page.wait_for_timeout(3500)
+            except Exception as e:
+                print(f"[Crawler] Vector navigation error for '{query_str}': {e}")
+                continue
+
+            max_scrolls_per_query = 15
+            consecutive_stagnant = 0
+            last_total_seen = len(seen_in_session)
+
+            for scroll_idx in range(max_scrolls_per_query):
                 if len(discovered_new_videos) >= target_count:
                     break
-                href = dom_links.nth(i).get_attribute("href")
-                if not href:
-                    continue
-                if href.startswith("/"):
-                    href = "https://www.tiktok.com" + href
-                clean_url = href.split("?")[0]
-                vid = extract_video_id(clean_url)
-                if vid and vid not in seen_in_session and vid not in existing_ids and vid not in discovered_new_videos:
-                    seen_in_session.add(vid)
-                    discovered_new_videos[vid] = {
-                        "video_id": vid,
-                        "url": clean_url,
-                        "keyword": keyword,
-                        "creator": "creator",
-                        "caption": "",
-                        "upload_date": datetime.now().strftime("%Y-%m-%d"),
-                        "duration_sec": 0,
-                        "views": 0,
-                        "likes": 0,
-                        "comments": 0,
-                        "reposts": 0,
-                        "saves": 0,
-                        "engagement_rate": 0.0,
-                        "score": 50.0,
-                        "_need_ytdlp": True
-                    }
+
+                page.evaluate("window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'});")
+                page.mouse.wheel(0, 4000)
+                page.keyboard.press("PageDown")
+                page.keyboard.press("PageDown")
+                page.wait_for_timeout(2000)
+
+                current_total_seen = len(seen_in_session)
+                if current_total_seen == last_total_seen:
+                    consecutive_stagnant += 1
+                    if consecutive_stagnant >= 4:
+                        print(f"[Crawler] Vector '{query_str}' exhausted. Switching to next search vector.")
+                        break
+                else:
+                    consecutive_stagnant = 0
+                    last_total_seen = current_total_seen
+
+                if job_id:
+                    pct = 15 + min(40, int((len(discovered_new_videos) / target_count) * 40))
+                    db.update_job(
+                        job_id,
+                        progress=pct,
+                        message=f"Searching '{query_str}': scanned {current_total_seen} videos, found {len(discovered_new_videos)}/{target_count} new..."
+                    )
 
         context.close()
 
