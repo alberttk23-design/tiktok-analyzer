@@ -301,6 +301,14 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 print(f"[Crawler] Skipping vector '{query_str}' because video cards failed to render after F5 retries.")
                 continue
 
+            # Focus directly on the video grid container so mouse/keyboard events scroll the grid
+            try:
+                page.mouse.move(700, 500)
+                page.mouse.click(700, 500)
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+
             # Scale scroll depth based on desired batch size (more scrolls if targeting 100-200)
             max_scrolls_per_query = 35 if target_count >= 100 else (25 if target_count >= 50 else 18)
             max_stagnant = 7
@@ -314,25 +322,54 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None):
                 if len(discovered_new_videos) >= target_count:
                     break
 
-                # 1. Multi-step progressive human-like wheel scroll (flicks)
+                # 1. Multi-step progressive human-like wheel scroll (flicks) directly inside grid
+                page.mouse.move(random.randint(650, 750), random.randint(450, 550))
                 for _ in range(3):
                     page.mouse.wheel(0, random.randint(500, 850))
-                    page.wait_for_timeout(random.randint(150, 300))
+                    page.wait_for_timeout(random.randint(150, 250))
 
                 # 2. Key navigation down
                 page.keyboard.press("PageDown")
+                page.keyboard.press("PageDown")
                 page.wait_for_timeout(random.randint(200, 350))
 
-                # 3. Intersection observer unstick / re-trigger gesture if stagnant
-                if consecutive_stagnant > 0:
-                    page.evaluate("window.scrollBy(0, -350)")
-                    page.wait_for_timeout(300)
-                    page.evaluate("window.scrollBy(0, 800)")
-                    page.keyboard.press("End")
-                else:
-                    page.evaluate("window.scrollBy({top: 600, behavior: 'smooth'})")
+                # 3. Direct container scroll on #grid-main / main to guarantee scroll events fire
+                page.evaluate("""() => {
+                    const targets = [
+                        document.querySelector('main#grid-main'),
+                        document.querySelector('main'),
+                        document.querySelector('[class*="SearchGridLayoutCon"]'),
+                        document.documentElement,
+                        document.body
+                    ];
+                    for (const t of targets) {
+                        if (t) {
+                            t.scrollTop += 1200;
+                            t.dispatchEvent(new Event('scroll', { bubbles: true }));
+                        }
+                    }
+                }""")
 
-                # 4. Realistic human jitter wait for TikTok CDN & API packet streaming
+                # 4. If stagnant, perform re-trigger gesture on container
+                if consecutive_stagnant > 0:
+                    page.evaluate("""() => {
+                        const m = document.querySelector('main#grid-main') || document.querySelector('main') || document.documentElement;
+                        if (m) {
+                            m.scrollTop -= 350;
+                            m.dispatchEvent(new Event('scroll', { bubbles: true }));
+                        }
+                    }""")
+                    page.wait_for_timeout(300)
+                    page.evaluate("""() => {
+                        const m = document.querySelector('main#grid-main') || document.querySelector('main') || document.documentElement;
+                        if (m) {
+                            m.scrollTop += 800;
+                            m.dispatchEvent(new Event('scroll', { bubbles: true }));
+                        }
+                    }""")
+                    page.keyboard.press("End")
+
+                # 5. Realistic human jitter wait for TikTok CDN & API packet streaming
                 wait_delay = random.uniform(2.8, 3.8)
                 time.sleep(wait_delay)
 
