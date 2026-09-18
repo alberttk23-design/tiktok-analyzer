@@ -60,6 +60,21 @@ class MultimodalBatchRequest(BaseModel):
     top_n: int = 5
 
 
+class VocAiClusterRequest(BaseModel):
+    keyword: str
+    engine: str = "gemini"
+    api_key: Optional[str] = None
+
+
+class BatchTranscribeRequest(BaseModel):
+    keyword: str
+    scope: str = "all"  # "all" or "voiceover_only"
+
+
+class BatchKeyframesRequest(BaseModel):
+    keyword: str
+
+
 class CreatorBookingRequest(BaseModel):
     booking_status: str = "new"
     booking_notes: str = ""
@@ -784,6 +799,162 @@ def batch_enrich_creators_endpoint(req: CreatorBatchEnrichRequest, background_ta
         "status": "started",
         "message": f"Bắt đầu quét live profile cho top {req.max_count} KOC"
     }
+
+
+# ---------------------------------------------------------------------------
+# AI-DRIVEN DYNAMIC ANALYSIS ENDPOINTS (VoC + Voice + Visual)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/voc-ai-cluster")
+def voc_ai_cluster_endpoint(req: VocAiClusterRequest, background_tasks: BackgroundTasks):
+    """Trigger AI-driven dynamic comment clustering (replaces hardcoded 6-pillar system)."""
+    from backend import voc_ai_cluster
+    job_id = f"voc_cluster_{str(uuid.uuid4())[:6]}"
+    db.create_job(job_id, req.keyword)
+
+    def run_cluster():
+        try:
+            db.update_job(job_id, status="processing", progress=10, message="Đang gửi bình luận tới AI phân cụm...")
+
+            def on_progress(done, total, msg):
+                pct = int((done / max(1, total)) * 100)
+                db.update_job(job_id, status="processing", progress=pct, message=msg)
+
+            result = voc_ai_cluster.cluster_comments_with_ai(
+                keyword=req.keyword,
+                engine=req.engine,
+                api_key=req.api_key,
+                progress_callback=on_progress
+            )
+            # Save clusters to DB
+            db.save_voc_ai_clusters(req.keyword, result.get("clusters", []))
+            db.update_job(job_id, status="completed", progress=100,
+                          message=f"Đã phân cụm AI thành {len(result.get('clusters', []))} nhóm chủ đề từ {result.get('total_analyzed', 0)} bình luận!")
+        except Exception as e:
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_cluster)
+    return {"job_id": job_id, "status": "started", "message": f"Bắt đầu AI phân cụm bình luận cho '{req.keyword}'"}
+
+
+@app.get("/api/voc-ai-clusters")
+def get_voc_ai_clusters_endpoint(keyword: Optional[str] = None):
+    """Get cached AI-generated VoC clusters for a keyword."""
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+    result = db.get_voc_ai_clusters(kw)
+    if not result:
+        return {"clusters": [], "total_clusters": 0, "generated_at": None}
+    return result
+
+
+@app.post("/api/batch-transcribe")
+def batch_transcribe_endpoint(req: BatchTranscribeRequest, background_tasks: BackgroundTasks):
+    """Trigger batch Whisper transcription for ALL videos in a niche."""
+    from backend.video_vision import batch_transcribe_niche
+    job_id = f"batch_transcribe_{str(uuid.uuid4())[:6]}"
+    db.create_job(job_id, req.keyword)
+
+    def run_batch():
+        try:
+            db.update_job(job_id, status="processing", progress=5, message="Đang chuẩn bị batch bóc băng Whisper AI...")
+
+            def on_progress(done, total, msg):
+                pct = int((done / max(1, total)) * 100)
+                db.update_job(job_id, status="processing", progress=pct, message=msg)
+
+            result = batch_transcribe_niche(
+                keyword=req.keyword,
+                scope=req.scope,
+                progress_callback=on_progress
+            )
+            db.update_job(job_id, status="completed", progress=100,
+                          message=f"Bóc băng hoàn tất! Thành công: {result['success']}/{result['total_pending']}, Lỗi: {result['failed']}")
+        except Exception as e:
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_batch)
+    return {"job_id": job_id, "status": "started", "message": f"Bắt đầu batch bóc băng cho ngách '{req.keyword}' (scope={req.scope})"}
+
+
+@app.get("/api/voice-corpus")
+def get_voice_corpus_endpoint(keyword: Optional[str] = None, engine: str = "gemini", api_key: Optional[str] = None):
+    """Get or generate voice corpus aggregate analysis for a keyword."""
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+
+    # Check cache first
+    cached = db.get_voice_corpus(kw)
+    if cached:
+        return cached
+
+    # Generate on-the-fly if no cache
+    from backend.voice_corpus import analyze_voice_corpus
+    result = analyze_voice_corpus(kw, engine=engine, api_key=api_key)
+    if result and result.get("total_with_speech", 0) > 0:
+        db.save_voice_corpus(kw, result)
+    return result
+
+
+@app.post("/api/batch-keyframes")
+def batch_keyframes_endpoint(req: BatchKeyframesRequest, background_tasks: BackgroundTasks):
+    """Trigger batch keyframe extraction & visual classification for ALL videos in a niche."""
+    from backend.video_vision import batch_extract_and_classify
+    job_id = f"batch_keyframes_{str(uuid.uuid4())[:6]}"
+    db.create_job(job_id, req.keyword)
+
+    def run_batch():
+        try:
+            db.update_job(job_id, status="processing", progress=5, message="Đang chuẩn bị batch phân loại hình ảnh Qwen-VL...")
+
+            def on_progress(done, total, msg):
+                pct = int((done / max(1, total)) * 100)
+                db.update_job(job_id, status="processing", progress=pct, message=msg)
+
+            result = batch_extract_and_classify(
+                keyword=req.keyword,
+                progress_callback=on_progress
+            )
+            # Save aggregate analysis
+            db.save_visual_corpus(req.keyword, result)
+            db.update_job(job_id, status="completed", progress=100,
+                          message=f"Phân loại hình ảnh hoàn tất! Thành công: {result['success']}/{result['total_pending']}")
+        except Exception as e:
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_batch)
+    return {"job_id": job_id, "status": "started", "message": f"Bắt đầu batch phân loại hình ảnh cho ngách '{req.keyword}'"}
+
+
+@app.get("/api/visual-corpus")
+def get_visual_corpus_endpoint(keyword: Optional[str] = None):
+    """Get visual corpus analysis (content type distribution) for a keyword."""
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+    cached = db.get_visual_corpus(kw)
+    if cached:
+        return cached
+    # If no cached data, compute from existing analysis_reviews
+    conn = db.get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT ar.visual_style, COUNT(*) as cnt
+    FROM analysis_reviews ar
+    JOIN videos v ON ar.video_id = v.video_id
+    WHERE v.keyword = ? AND ar.visual_style IS NOT NULL AND ar.visual_style != '' AND ar.visual_style != 'Standard'
+    GROUP BY ar.visual_style ORDER BY cnt DESC
+    """, (kw,))
+    rows = cursor.fetchall()
+    conn.close()
+    total = sum(r["cnt"] for r in rows) if rows else 0
+    content_types = [{"type": r["visual_style"], "count": r["cnt"], "pct": round((r["cnt"] / max(1, total)) * 100, 1)} for r in rows]
+    return {"keyword": kw, "total_classified": total, "content_types": content_types, "generated_at": None}
 
 
 if __name__ == "__main__":

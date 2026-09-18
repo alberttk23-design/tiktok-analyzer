@@ -336,6 +336,16 @@ function App() {
   const [copiedCaptionText, setCopiedCaptionText] = useState<string | null>(null);
   const [copiedHashtagSet, setCopiedHashtagSet] = useState<boolean>(false);
 
+  // AI-Driven Dynamic Analysis states
+  const [vocAiClusters, setVocAiClusters] = useState<any>(null);
+  const [vocAiClustering, setVocAiClustering] = useState<boolean>(false);
+  const [voiceCorpus, setVoiceCorpus] = useState<any>(null);
+  const [visualCorpus, setVisualCorpus] = useState<any>(null);
+  const [batchTranscribing, setBatchTranscribing] = useState<boolean>(false);
+  const [batchTranscribeJob, setBatchTranscribeJob] = useState<{ jobId: string; progress: number; message: string } | null>(null);
+  const [batchKeyframing, setBatchKeyframing] = useState<boolean>(false);
+  const [batchKeyframeJob, setBatchKeyframeJob] = useState<{ jobId: string; progress: number; message: string } | null>(null);
+
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState<boolean>(false);
@@ -597,6 +607,37 @@ function App() {
         const patJson = await patRes.json();
         setPatterns(patJson);
       }
+
+      // Load AI VoC Clusters
+      try {
+        const vocAiRes = await fetch(`${API_BASE}/api/voc-ai-clusters?keyword=${encodeURIComponent(kw)}`);
+        if (vocAiRes.ok) {
+          const vocAiJson = await vocAiRes.json();
+          if (vocAiJson && vocAiJson.clusters && vocAiJson.clusters.length > 0) {
+            setVocAiClusters(vocAiJson);
+          } else {
+            setVocAiClusters(null);
+          }
+        }
+      } catch (_) {}
+
+      // Load Voice Corpus Analysis
+      try {
+        const vcRes = await fetch(`${API_BASE}/api/voice-corpus?keyword=${encodeURIComponent(kw)}`);
+        if (vcRes.ok) {
+          const vcJson = await vcRes.json();
+          setVoiceCorpus(vcJson);
+        }
+      } catch (_) {}
+
+      // Load Visual Corpus (Content Types Breakdown)
+      try {
+        const visRes = await fetch(`${API_BASE}/api/visual-corpus?keyword=${encodeURIComponent(kw)}`);
+        if (visRes.ok) {
+          const visJson = await visRes.json();
+          setVisualCorpus(visJson);
+        }
+      } catch (_) {}
     } catch (e) {
       console.error("Failed to load results:", e);
     }
@@ -829,6 +870,179 @@ function App() {
       console.error("Batch crawl comments failed:", e);
       setBatchCrawlingComments(false);
       setCommentCrawlJob(null);
+    }
+  }
+
+  // 1. AI VoC Dynamic Clustering
+  async function handleRunVocAiClustering() {
+    if (vocAiClustering || !keyword.trim()) return;
+    setVocAiClustering(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/voc-ai-cluster`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: keyword.trim(), engine: "gemini" }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const jobId = json.job_id;
+        if (!jobId) {
+          setVocAiClustering(false);
+          return;
+        }
+        const poll = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+            if (jRes.ok) {
+              const j = await jRes.json();
+              if (j.status === "completed" || j.status === "failed") {
+                clearInterval(poll);
+                setVocAiClustering(false);
+                const cRes = await fetch(`${API_BASE}/api/voc-ai-clusters?keyword=${encodeURIComponent(keyword.trim())}`);
+                if (cRes.ok) {
+                  const cJson = await cRes.json();
+                  if (cJson && cJson.clusters) setVocAiClusters(cJson);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("VoC AI cluster poll error:", err);
+          }
+        }, 2000);
+      } else {
+        setVocAiClustering(false);
+      }
+    } catch (e) {
+      console.error("AI VoC Clustering failed:", e);
+      setVocAiClustering(false);
+    }
+  }
+
+  // 2. Batch Transcribe All Videos in Niche
+  async function handleRunBatchTranscribe(scope: "all" | "voiceover_only" = "all") {
+    if (batchTranscribing || !keyword.trim()) return;
+    setBatchTranscribing(true);
+    setBatchTranscribeJob({
+      jobId: "",
+      progress: 5,
+      message: "Đang khởi động batch Whisper AI bóc băng toàn bộ âm thanh...",
+    });
+    try {
+      const res = await fetch(`${API_BASE}/api/batch-transcribe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: keyword.trim(), scope }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const jobId = json.job_id;
+        if (!jobId) {
+          setBatchTranscribing(false);
+          setBatchTranscribeJob(null);
+          return;
+        }
+        const poll = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+            if (jRes.ok) {
+              const j = await jRes.json();
+              if (j) {
+                setBatchTranscribeJob({
+                  jobId: j.job_id || jobId,
+                  progress: typeof j.progress === "number" ? j.progress : 10,
+                  message: j.message || "Đang bóc băng...",
+                });
+                if (j.status === "completed" || j.status === "failed") {
+                  clearInterval(poll);
+                  await loadData();
+                  const vRes = await fetch(`${API_BASE}/api/voice-corpus?keyword=${encodeURIComponent(keyword.trim())}`);
+                  if (vRes.ok) {
+                    const vJson = await vRes.json();
+                    if (vJson) setVoiceCorpus(vJson);
+                  }
+                  setTimeout(() => {
+                    setBatchTranscribing(false);
+                    setBatchTranscribeJob(null);
+                  }, 1500);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Batch transcribe poll error:", err);
+          }
+        }, 2000);
+      } else {
+        setBatchTranscribing(false);
+        setBatchTranscribeJob(null);
+      }
+    } catch (e) {
+      console.error("Batch transcribe failed:", e);
+      setBatchTranscribing(false);
+      setBatchTranscribeJob(null);
+    }
+  }
+
+  // 3. Batch Keyframe Extract & Vision Classification
+  async function handleRunBatchKeyframes() {
+    if (batchKeyframing || !keyword.trim()) return;
+    setBatchKeyframing(true);
+    setBatchKeyframeJob({
+      jobId: "",
+      progress: 5,
+      message: "Đang khởi động trích xuất khung hình và phân loại visual bằng Qwen-VL...",
+    });
+    try {
+      const res = await fetch(`${API_BASE}/api/batch-keyframes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: keyword.trim() }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const jobId = json.job_id;
+        if (!jobId) {
+          setBatchKeyframing(false);
+          setBatchKeyframeJob(null);
+          return;
+        }
+        const poll = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+            if (jRes.ok) {
+              const j = await jRes.json();
+              if (j) {
+                setBatchKeyframeJob({
+                  jobId: j.job_id || jobId,
+                  progress: typeof j.progress === "number" ? j.progress : 10,
+                  message: j.message || "Đang phân loại visual...",
+                });
+                if (j.status === "completed" || j.status === "failed") {
+                  clearInterval(poll);
+                  await loadData();
+                  const visRes = await fetch(`${API_BASE}/api/visual-corpus?keyword=${encodeURIComponent(keyword.trim())}`);
+                  if (visRes.ok) {
+                    const visJson = await visRes.json();
+                    if (visJson) setVisualCorpus(visJson);
+                  }
+                  setTimeout(() => {
+                    setBatchKeyframing(false);
+                    setBatchKeyframeJob(null);
+                  }, 1500);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Batch keyframes poll error:", err);
+          }
+        }, 2000);
+      } else {
+        setBatchKeyframing(false);
+        setBatchKeyframeJob(null);
+      }
+    } catch (e) {
+      console.error("Batch keyframes failed:", e);
+      setBatchKeyframing(false);
+      setBatchKeyframeJob(null);
     }
   }
 
@@ -1976,6 +2190,20 @@ ${data.master_analysis.summary}\n`;
 
               <div className="flex flex-wrap items-center gap-2">
                 <button
+                  onClick={handleRunBatchKeyframes}
+                  disabled={batchKeyframing}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  title="Tự động tải 1 khung hình mở đầu (kf1) của từng video và đưa qua Qwen-VL để phân loại dạng video (unboxing, decor, review...)"
+                >
+                  {batchKeyframing ? (
+                    <Loader2 size={13} className="animate-spin text-pink-400" />
+                  ) : (
+                    <Camera size={13} className="text-pink-400" />
+                  )}
+                  <span>📸 Phân Loại Hình Ảnh Toàn Ngách</span>
+                </button>
+
+                <button
                   onClick={() => handleRunTopMultimodal(5)}
                   disabled={analyzingTopMultimodal}
                   className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-violet-600/25 transition cursor-pointer disabled:opacity-50"
@@ -1995,6 +2223,83 @@ ${data.master_analysis.summary}\n`;
                 </button>
               </div>
             </div>
+
+            {/* Batch Keyframe Progress Banner */}
+            {batchKeyframeJob && (
+              <div className="bg-gradient-to-r from-pink-950/70 via-purple-950/50 to-slate-900 border border-pink-500/50 rounded-2xl p-4 shadow-xl space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-pink-200 flex items-center gap-2">
+                    <Loader2 size={14} className="animate-spin text-pink-400" />
+                    {batchKeyframeJob.message}
+                  </span>
+                  <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
+                    {batchKeyframeJob.progress}%
+                  </span>
+                </div>
+                <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
+                  <div
+                    className="bg-gradient-to-r from-pink-500 via-purple-500 to-violet-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
+                    style={{ width: `${Math.min(100, Math.max(5, batchKeyframeJob.progress))}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* VISUAL CONTENT TYPES DISTRIBUTION (If classified) */}
+            {visualCorpus?.content_types && visualCorpus.content_types.length > 0 && (
+              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                  <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                    <Camera size={15} />
+                    <span>Phân Loại Định Dạng Nội Dung Thị Giác ({visualCorpus.total_classified} video đã phân tích)</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400 font-mono">Qwen-VL Vision AI</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-1">
+                  {visualCorpus.content_types.map((ct: any, ctIdx: number) => {
+                    const typeIcons: Record<string, string> = {
+                      "Aesthetic Room Tour": "🏡",
+                      "POV Unboxing": "📦",
+                      "Demonstration": "🛠️",
+                      "Before/After": "✨",
+                      "Selfie Talking Head": "🗣️",
+                      "ASMR Styling": "🌿",
+                      "Product Showcase": "🔍",
+                    };
+                    const icon = typeIcons[ct.type] || "🎬";
+
+                    return (
+                      <div
+                        key={ctIdx}
+                        className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-2 hover:border-pink-500/40 transition"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between text-xs mb-1">
+                            <span className="text-base">{icon}</span>
+                            <span className="font-mono font-bold text-pink-400 text-xs">{ct.pct}%</span>
+                          </div>
+                          <span className="text-xs font-bold text-white block truncate" title={ct.type}>
+                            {ct.type}
+                          </span>
+                        </div>
+                        <div>
+                          <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                            <div
+                              className="bg-gradient-to-r from-pink-500 to-purple-600 h-full rounded-full"
+                              style={{ width: `${Math.min(100, Math.max(8, ct.pct))}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-500 font-mono mt-1 block">
+                            {ct.count} video
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Filter Chips by DTC Angle */}
             <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -3589,7 +3894,7 @@ ${data.master_analysis.summary}\n`;
         {activeTab === "sounds" && (() => {
           const intel = audioIntelData || data?.audio_intelligence || {};
           const summary = intel.summary || data?.audio_summary || {};
-          const voiceCorpus = intel.voice_corpus || {};
+          const voiceCorpusLegacy = intel.voice_corpus || {};
           const frameworks = intel.frameworks || [];
           const allSounds: any[] = intel.top_sounds || summary.top_sounds || [];
 
@@ -3640,12 +3945,66 @@ ${data.master_analysis.summary}\n`;
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono px-3.5 py-1.5 bg-slate-950/90 text-pink-300 rounded-xl border border-pink-500/30 font-semibold shadow-inner">
-                        {summary.total_analyzed || data?.videos?.length || 0} video đã quét âm thanh
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={() => handleRunBatchTranscribe("voiceover_only")}
+                        disabled={batchTranscribing}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                        title="Tự động tải và bóc băng lời thoại cho các video có giọng nói"
+                      >
+                        {batchTranscribing ? (
+                          <Loader2 size={13} className="animate-spin text-pink-400" />
+                        ) : (
+                          <Mic size={13} className="text-pink-400" />
+                        )}
+                        <span>Bóc Băng Video Voice</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleRunBatchTranscribe("all")}
+                        disabled={batchTranscribing}
+                        className="bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-500 hover:to-indigo-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-pink-600/30 transition cursor-pointer disabled:opacity-50"
+                        title="Tự động tải stream và bóc băng Whisper AI cho toàn bộ video trong ngách"
+                      >
+                        {batchTranscribing ? (
+                          <>
+                            <Loader2 size={13} className="animate-spin" />
+                            <span>Đang bóc băng toàn ngách...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Zap size={13} className="text-yellow-300" />
+                            <span>⚡ Bóc Băng Toàn Bộ Ngách</span>
+                          </>
+                        )}
+                      </button>
+
+                      <span className="text-xs font-mono px-3.5 py-2 bg-slate-950/90 text-pink-300 rounded-xl border border-pink-500/30 font-semibold shadow-inner">
+                        {summary.total_analyzed || data?.videos?.length || 0} video đã quét
                       </span>
                     </div>
                   </div>
+
+                  {/* Batch Transcribe Progress Banner */}
+                  {batchTranscribeJob && (
+                    <div className="bg-gradient-to-r from-pink-950/70 via-purple-950/50 to-slate-900 border border-pink-500/50 rounded-2xl p-4 shadow-xl space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-pink-200 flex items-center gap-2">
+                          <Loader2 size={14} className="animate-spin text-pink-400" />
+                          {batchTranscribeJob.message}
+                        </span>
+                        <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
+                          {batchTranscribeJob.progress}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
+                        <div
+                          className="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
+                          style={{ width: `${Math.min(100, Math.max(5, batchTranscribeJob.progress))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
 
                   {/* 4 Hero Metric Cards */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5 pt-2">
@@ -3661,7 +4020,7 @@ ${data.master_analysis.summary}\n`;
                     <div className="bg-slate-900/80 border border-purple-500/30 p-4 rounded-2xl">
                       <div className="flex items-center justify-between text-xs text-purple-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><Bookmark size={14} /> Hiệu Quả Chốt Đơn</span>
-                        <span className="font-bold font-mono">+{summary.saves_boost_percentage || voiceCorpus.saves_boost_percentage || 0}%</span>
+                        <span className="font-bold font-mono">+{summary.saves_boost_percentage || voiceCorpusLegacy.saves_boost_percentage || 0}%</span>
                       </div>
                       <div className="text-lg font-bold text-white">Tăng Lượt Lưu (Saves)</div>
                       <p className="text-[11px] text-slate-400 mt-1">Khi video có giọng nói so với chỉ dùng nhạc</p>
@@ -3682,11 +4041,11 @@ ${data.master_analysis.summary}\n`;
                       <div className="flex items-center justify-between text-xs text-emerald-400 mb-1">
                         <span className="font-semibold flex items-center gap-1"><MessageCircle size={14} /> Tỷ Lệ Có Giọng Nói</span>
                         <span className="font-bold font-mono">
-                          {(summary.total_analyzed || data?.videos?.length) ? Math.round(((voiceCorpus.total_spoken_videos || summary.voice_videos_count || 0) / Math.max(summary.total_analyzed || data?.videos?.length || 1, 1)) * 100) : 0}%
+                          {(summary.total_analyzed || data?.videos?.length) ? Math.round(((voiceCorpusLegacy.total_spoken_videos || summary.voice_videos_count || 0) / Math.max(summary.total_analyzed || data?.videos?.length || 1, 1)) * 100) : 0}%
                         </span>
                       </div>
                       <div className="text-lg font-bold text-white">
-                        {voiceCorpus.total_spoken_videos || summary.voice_videos_count || 0} / {summary.total_analyzed || data?.videos?.length || 0} Video
+                        {voiceCorpusLegacy.total_spoken_videos || summary.voice_videos_count || 0} / {summary.total_analyzed || data?.videos?.length || 0} Video
                       </div>
                       <p className="text-[11px] text-slate-400 mt-1">Sử dụng lời thoại thật hoặc lồng nhạc nền</p>
                     </div>
@@ -3702,16 +4061,91 @@ ${data.master_analysis.summary}\n`;
                     <span>Kho Dữ Liệu Lời Thoại & Giọng Nói (Voice Corpus Intelligence)</span>
                   </div>
                   <h3 className="text-xl font-black text-white mt-1">
-                    Họ Đang Nói Gì Nhiều Nhất? (Top 5 Chủ Đề Lời Thoại Được Lặp Lại Nhiều Nhất)
+                    Họ Đang Nói Gì Nhiều Nhất? (Top Cụm Từ & Chủ Đề Lời Thoại)
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5">
                     Phân tích từ toàn bộ lời thoại và kịch bản video để tìm ra luận điểm bán hàng (Selling Points) đánh trúng tâm lý người mua nhất.
                   </p>
                 </div>
 
+                {/* N-GRAM VOICE PHRASES (COMMON PHRASES ACROSS ALL TRANSCRIBED VIDEOS) */}
+                {voiceCorpus?.common_phrases && voiceCorpus.common_phrases.length > 0 && (
+                  <div className="bg-slate-950 p-5 rounded-2xl border border-pink-500/30 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles size={14} /> Cụm Từ Lời Thoại Được Nói Nhiều Nhất (N-Gram Voice Analysis)
+                        </span>
+                        <p className="text-xs text-slate-300 mt-0.5">
+                          Trích xuất từ toàn bộ <strong>{voiceCorpus.total_with_speech} video có lời thoại thật</strong>. Tần suất các câu nói/cụm từ mà các creator dùng chung để thuyết phục khách hàng.
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono px-3 py-1 bg-pink-950/80 text-pink-300 border border-pink-500/40 rounded-xl font-bold">
+                        {voiceCorpus.total_transcribed} video đã bóc băng
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {voiceCorpus.common_phrases.slice(0, 18).map((p: any, pIdx: number) => (
+                        <div
+                          key={pIdx}
+                          className="bg-slate-900/80 p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-2 hover:border-pink-500/40 transition"
+                        >
+                          <div className="truncate space-y-0.5">
+                            <span className="font-semibold text-white text-xs block truncate italic">
+                              &ldquo;{p.phrase}&rdquo;
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-mono">
+                              {p.video_count} video sử dụng ({p.percentage}%)
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => copySoundHelper(p.phrase)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-pink-600 text-slate-400 hover:text-white transition cursor-pointer shrink-0"
+                            title="Sao chép cụm từ"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* AI Voice Themes if available */}
+                    {voiceCorpus.voice_themes && voiceCorpus.voice_themes.length > 0 && (
+                      <div className="pt-3 border-t border-slate-800/80 space-y-3">
+                        <span className="text-xs font-bold text-violet-400 uppercase tracking-wider block">
+                          🧠 Các Trường Phái Kịch Bản Thoại Chính (AI Semantic Themes)
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {voiceCorpus.voice_themes.map((th: any, thIdx: number) => (
+                            <div key={thIdx} className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 space-y-2">
+                              <div className="flex items-center justify-between">
+                                <h6 className="font-bold text-xs text-white truncate">{th.theme}</h6>
+                                <span className="text-[10px] font-mono font-bold text-violet-400 bg-violet-950/60 px-2 py-0.5 rounded-full border border-violet-800/50">
+                                  {th.frequency_pct}%
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 leading-relaxed">{th.description}</p>
+                              {th.sample_phrases && (
+                                <div className="space-y-1 pt-1 border-t border-slate-800/60">
+                                  {th.sample_phrases.slice(0, 2).map((sp: string, spIdx: number) => (
+                                    <span key={spIdx} className="text-[10px] text-pink-300 block italic truncate">
+                                      • &ldquo;{sp}&rdquo;
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 5 Spoken Topics Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {(voiceCorpus.top_spoken_topics || []).map((t: any, idx: number) => {
+                  {(voiceCorpusLegacy.top_spoken_topics || []).map((t: any, idx: number) => {
                     let urgencyColor = "bg-rose-500/20 text-rose-300 border-rose-500/30";
                     if (t.urgency === "Cao") urgencyColor = "bg-amber-500/20 text-amber-300 border-amber-500/30";
                     if (t.urgency === "Trung Bình") urgencyColor = "bg-purple-500/20 text-purple-300 border-purple-500/30";
@@ -3771,7 +4205,7 @@ ${data.master_analysis.summary}\n`;
                     </div>
 
                     <div className="space-y-2.5">
-                      {(voiceCorpus.top_spoken_hooks || []).map((h: any, hIdx: number) => (
+                      {(voiceCorpusLegacy.top_spoken_hooks || []).map((h: any, hIdx: number) => (
                         <div
                           key={hIdx}
                           className="bg-slate-950 p-4 rounded-2xl border border-slate-800 hover:border-pink-500/40 transition flex items-start justify-between gap-3 group"
@@ -3825,7 +4259,7 @@ ${data.master_analysis.summary}\n`;
                     </div>
 
                     <div className="space-y-3">
-                      {(voiceCorpus.persona_distribution || []).map((p: any, pIdx: number) => {
+                      {(voiceCorpusLegacy.persona_distribution || []).map((p: any, pIdx: number) => {
                         let colorClass = "from-sky-950/40 border-sky-800/60 text-sky-300";
                         if (p.color === "purple") colorClass = "from-purple-950/40 border-purple-800/60 text-purple-300";
                         if (p.color === "amber") colorClass = "from-amber-950/40 border-amber-800/60 text-amber-300";
@@ -4189,8 +4623,42 @@ ${data.master_analysis.summary}\n`;
                         </>
                       )}
                     </button>
+
+                    <button
+                      onClick={handleRunVocAiClustering}
+                      disabled={vocAiClustering}
+                      className="bg-gradient-to-r from-purple-600 via-pink-600 to-rose-600 hover:from-purple-500 hover:to-rose-500 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-purple-600/30 transition cursor-pointer disabled:opacity-50"
+                      title="AI quét toàn bộ comment và tự động gom thành các nhóm chủ đề thực tế, không giới hạn 6 trụ cột"
+                    >
+                      {vocAiClustering ? (
+                        <>
+                          <Loader2 size={13} className="animate-spin" />
+                          <span>AI đang phân cụm...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles size={13} className="text-yellow-300" />
+                          <span>🤖 AI Phân Cụm Tự Động (Gemini)</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
+
+                {/* AI VoC Clustering Loading Banner */}
+                {vocAiClustering && (
+                  <div className="bg-gradient-to-r from-purple-950/70 via-slate-900 to-pink-950/50 border border-purple-500/50 rounded-2xl p-4 shadow-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-purple-200 flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin text-pink-400" />
+                        AI đang đọc và gom nhóm ngữ nghĩa toàn bộ bình luận...
+                      </span>
+                      <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
+                        Processing...
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 {/* Active Realtime Comment Crawl Banner */}
                 {commentCrawlJob && (
@@ -4794,12 +5262,25 @@ ${data.master_analysis.summary}\n`;
                           <MessageSquare size={16} />
                           <span>Voice of Customer (VoC) Chuyên Sâu</span>
                           <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                            6 Trụ Cột Tâm Lý
+                            {vocAiClusters?.clusters?.length ? `AI Semantic Clusters (${vocAiClusters.clusters.length} Nhóm)` : "6 Trụ Cột Tâm Lý"}
                           </span>
                         </div>
                         <h4 className="text-lg md:text-xl font-bold text-white mt-0.5">
-                          Ma Trận 6 Trụ Cột Giải Mã Tâm Lý Khách Hàng ({totalCommentsAnalyzed.toLocaleString()} Bình Luận)
+                          {vocAiClusters?.clusters?.length
+                            ? `Ma Trận Phân Cụm Ngữ Nghĩa Tự Động (${vocAiClusters.clusters.length} Nhóm Chủ Đề Thực Tế)`
+                            : `Ma Trận 6 Trụ Cột Giải Mã Tâm Lý Khách Hàng (${totalCommentsAnalyzed.toLocaleString()} Bình Luận)`}
                         </h4>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleRunVocAiClustering}
+                          disabled={vocAiClustering}
+                          className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                        >
+                          <Sparkles size={12} />
+                          <span>{vocAiClustering ? "Đang phân cụm..." : vocAiClusters?.clusters?.length ? "Tái Phân Cụm AI" : "AI Phân Cụm Tự Do"}</span>
+                        </button>
                       </div>
                     </div>
 
@@ -4810,102 +5291,164 @@ ${data.master_analysis.summary}\n`;
                       </div>
                     )}
 
-                    {/* 6 Pillars Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                      {Object.entries(pillars).map(([pillarKey, pData]: [string, any]) => {
-                        const topQuotes = pData.top_quotes || [];
-                        const angles = pData.angle_recommendations || [];
-                        const borderColors: Record<string, string> = {
-                          rose: "border-rose-800/50 hover:border-rose-600/70",
-                          amber: "border-amber-800/50 hover:border-amber-600/70",
-                          sky: "border-sky-800/50 hover:border-sky-600/70",
-                          indigo: "border-indigo-800/50 hover:border-indigo-600/70",
-                          emerald: "border-emerald-800/50 hover:border-emerald-600/70",
-                          purple: "border-purple-800/50 hover:border-purple-600/70",
-                        };
-                        const badgeColors: Record<string, string> = {
-                          rose: "bg-rose-500/20 text-rose-300 border-rose-500/30",
-                          amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-                          sky: "bg-sky-500/20 text-sky-300 border-sky-500/30",
-                          indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-                          emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-                          purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-                        };
-                        const colKey = pData.color || "indigo";
-                        const bClass = borderColors[colKey] || borderColors.indigo;
-                        const bdgClass = badgeColors[colKey] || badgeColors.indigo;
+                    {/* DYNAMIC AI CLUSTERS GRID (If AI clusters exist) */}
+                    {vocAiClusters && vocAiClusters.clusters && vocAiClusters.clusters.length > 0 ? (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                          {vocAiClusters.clusters.map((c: any, cIdx: number) => (
+                            <div
+                              key={cIdx}
+                              className="bg-slate-950/90 border border-purple-800/40 hover:border-purple-600/70 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition shadow-lg"
+                            >
+                              <div className="space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] px-2.5 py-0.5 rounded-full font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                    Chủ Đề #{cIdx + 1}
+                                  </span>
+                                  <div className="text-right">
+                                    <span className="font-mono text-sm font-black text-white">
+                                      {c.count} cmt
+                                    </span>
+                                    <span className="text-[10px] text-purple-400 block font-mono font-bold">
+                                      ({c.percentage}%)
+                                    </span>
+                                  </div>
+                                </div>
 
-                        return (
-                          <div
-                            key={pillarKey}
-                            className={`bg-slate-950/80 border ${bClass} rounded-2xl p-5 flex flex-col justify-between space-y-4 transition shadow-lg`}
-                          >
-                            <div className="space-y-2.5">
-                              <div className="flex items-center justify-between">
-                                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${bdgClass}`}>
-                                  {pData.badge || pillarKey}
-                                </span>
-                                <div className="text-right">
-                                  <span className="font-mono text-sm font-black text-white">
-                                    {pData.count || 0} cmt
-                                  </span>
-                                  <span className="text-[10px] text-slate-400 block font-mono">
-                                    ({pData.percentage || 0}%)
-                                  </span>
+                                <h5 className="font-bold text-white text-sm">
+                                  {c.name}
+                                </h5>
+
+                                {c.description && (
+                                  <p className="text-xs text-slate-400 leading-relaxed">
+                                    {c.description}
+                                  </p>
+                                )}
+
+                                <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
+                                  <div
+                                    className="bg-gradient-to-r from-purple-500 via-pink-500 to-rose-500 h-full rounded-full"
+                                    style={{ width: `${Math.min(100, Math.max(5, c.percentage))}%` }}
+                                  />
                                 </div>
                               </div>
 
-                              <h5 className="font-bold text-white text-sm">
-                                {pData.title || pillarKey}
-                              </h5>
-
-                              <p className="text-xs text-slate-400 leading-relaxed">
-                                {pData.description}
-                              </p>
-
-                              {pData.psychological_driver && (
-                                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-300">
-                                  <span className="font-bold text-amber-300 block mb-0.5">🧠 Động lực tâm lý:</span>
-                                  {pData.psychological_driver}
-                                </div>
-                              )}
-
-                              {topQuotes.length > 0 && (
-                                <div className="space-y-1.5 pt-1">
-                                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                                    💬 Trích dẫn bình luận thật:
+                              {/* Quotes */}
+                              {c.top_quotes && c.top_quotes.length > 0 && (
+                                <div className="pt-2 border-t border-slate-900 space-y-2">
+                                  <span className="text-[10px] font-semibold text-slate-500 block">
+                                    Bình luận tiêu biểu:
                                   </span>
-                                  {topQuotes.slice(0, 2).map((q: any, qIdx: number) => (
-                                    <div
-                                      key={qIdx}
-                                      className="bg-slate-900/60 p-2 rounded-lg border border-slate-800/80 text-[11px] text-slate-300 italic"
-                                    >
-                                      &ldquo;{q.text}&rdquo;
-                                      {q.likes > 0 && (
-                                        <span className="not-italic text-[10px] text-pink-400 ml-1 font-mono">
-                                          ({q.likes} tym)
-                                        </span>
-                                      )}
+                                  {c.top_quotes.slice(0, 2).map((q: any, qIdx: number) => (
+                                    <div key={qIdx} className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-300 space-y-1">
+                                      <p className="italic">&ldquo;{q.text}&rdquo;</p>
+                                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                        <span>@{q.username || "khách"}</span>
+                                        {q.likes > 0 && <span className="text-pink-400 font-mono">❤️ {q.likes}</span>}
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
                               )}
                             </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      /* 6 Pillars Cards (Default baseline) */
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {Object.entries(pillars).map(([pillarKey, pData]: [string, any]) => {
+                          const topQuotes = pData.top_quotes || [];
+                          const angles = pData.angle_recommendations || [];
+                          const borderColors: Record<string, string> = {
+                            rose: "border-rose-800/50 hover:border-rose-600/70",
+                            amber: "border-amber-800/50 hover:border-amber-600/70",
+                            sky: "border-sky-800/50 hover:border-sky-600/70",
+                            indigo: "border-indigo-800/50 hover:border-indigo-600/70",
+                            emerald: "border-emerald-800/50 hover:border-emerald-600/70",
+                            purple: "border-purple-800/50 hover:border-purple-600/70",
+                          };
+                          const badgeColors: Record<string, string> = {
+                            rose: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+                            amber: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+                            sky: "bg-sky-500/20 text-sky-300 border-sky-500/30",
+                            indigo: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+                            emerald: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+                            purple: "bg-purple-500/20 text-purple-300 border-purple-500/30",
+                          };
+                          const colKey = pData.color || "indigo";
+                          const bClass = borderColors[colKey] || borderColors.indigo;
+                          const bdgClass = badgeColors[colKey] || badgeColors.indigo;
 
-                            {angles.length > 0 && (
-                              <div className="pt-2.5 border-t border-slate-900">
-                                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
-                                  🎯 Góc nội dung giải quyết:
-                                </span>
-                                <p className="text-[11px] text-slate-300">
-                                  {angles[0]}
+                          return (
+                            <div
+                              key={pillarKey}
+                              className={`bg-slate-950/80 border ${bClass} rounded-2xl p-5 flex flex-col justify-between space-y-4 transition shadow-lg`}
+                            >
+                              <div className="space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                  <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${bdgClass}`}>
+                                    {pData.badge || pillarKey}
+                                  </span>
+                                  <div className="text-right">
+                                    <span className="font-mono text-sm font-black text-white">
+                                      {pData.count || 0} cmt
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 block font-mono">
+                                      ({pData.percentage || 0}%)
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <h5 className="font-bold text-white text-sm">
+                                  {pData.title || pillarKey}
+                                </h5>
+
+                                <p className="text-xs text-slate-400 leading-relaxed">
+                                  {pData.description}
                                 </p>
+
+                                {pData.psychological_driver && (
+                                  <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 text-[11px] text-slate-300">
+                                    <span className="font-bold text-amber-300 block mb-0.5">🧠 Động lực tâm lý:</span>
+                                    {pData.psychological_driver}
+                                  </div>
+                                )}
+
+                                {topQuotes.length > 0 && (
+                                  <div className="pt-2 border-t border-slate-900 space-y-1.5">
+                                    <span className="text-[10px] font-semibold text-slate-500 block">
+                                      Trích dẫn thực tế từ khách:
+                                    </span>
+                                    {topQuotes.slice(0, 2).map((q: any, qIdx: number) => (
+                                      <p key={qIdx} className="text-xs text-slate-300 italic">
+                                        &ldquo;{q.text}&rdquo;
+                                        {q.likes > 0 && (
+                                          <span className="text-[10px] text-pink-400 ml-1.5 font-mono not-italic">
+                                            ❤️ {q.likes}
+                                          </span>
+                                        )}
+                                      </p>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+
+                              {angles.length > 0 && (
+                                <div className="pt-2.5 border-t border-slate-900">
+                                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-1">
+                                    🎯 Góc nội dung giải quyết:
+                                  </span>
+                                  <p className="text-[11px] text-slate-300">
+                                    {angles[0]}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
 
                     {/* Sourcing Directives & Product Improvements */}
                     {sourcingRecs.length > 0 && (

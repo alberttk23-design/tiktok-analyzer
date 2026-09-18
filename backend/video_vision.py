@@ -258,3 +258,221 @@ def analyze_video_multimodal_full(video_url: str, video_id: str, caption: str = 
                 temp_vid.unlink()
             except Exception:
                 pass
+
+
+def batch_transcribe_niche(keyword: str, scope: str = "all", progress_callback=None) -> dict:
+    """
+    Batch transcribe ALL videos in a niche that don't yet have transcriptions.
+    Downloads each video stream, runs Whisper, saves transcript, deletes mp4.
+    
+    Args:
+        keyword: Niche keyword to process
+        scope: "all" to transcribe everything, "voiceover_only" to only process voiceover-tagged videos
+        progress_callback: Optional callable(done, total, message) for realtime progress updates
+    
+    Returns: Summary dict with counts
+    """
+    from backend.audio_transcriber import transcribe_media_file
+    from backend import db
+
+    conn = db.get_db()
+    cursor = conn.cursor()
+
+    # Find videos that need transcription (no transcript in analysis_reviews yet)
+    scope_filter = ""
+    if scope == "voiceover_only":
+        scope_filter = "AND v.sound_type IN ('voiceover', 'voice_with_music')"
+    
+    cursor.execute(f"""
+    SELECT v.video_id, v.url, v.caption, v.duration, v.sound_type
+    FROM videos v
+    LEFT JOIN analysis_reviews ar ON v.video_id = ar.video_id
+    WHERE v.keyword = ?
+      AND (ar.transcript IS NULL OR ar.transcript = '' OR ar.video_id IS NULL)
+      {scope_filter}
+    ORDER BY v.views DESC
+    """, (keyword,))
+    pending = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    total = len(pending)
+    done = 0
+    success = 0
+    failed = 0
+
+    logger.info(f"Batch transcribe: {total} videos pending for '{keyword}' (scope={scope})")
+
+    for vid_info in pending:
+        video_id = vid_info["video_id"]
+        video_url = vid_info["url"]
+        caption = vid_info.get("caption", "")
+        duration = vid_info.get("duration", 15.0) or 15.0
+
+        done += 1
+        if progress_callback:
+            progress_callback(done, total, f"Đang bóc băng video {done}/{total}: {video_id[:20]}...")
+
+        try:
+            # Download stream
+            temp_vid = download_video_stream(video_url, video_id)
+            if not temp_vid or not temp_vid.exists():
+                logger.warning(f"Skipping {video_id}: download failed")
+                failed += 1
+                continue
+
+            try:
+                # Transcribe with Whisper
+                audio_res = transcribe_media_file(str(temp_vid), model_size="tiny")
+                transcript = audio_res.get("transcript", "").strip()
+                spoken_hook = audio_res.get("spoken_hook", "").strip()
+
+                # Refine sound_type based on actual audio content
+                caption_lower = caption.lower()
+                if "asmr" in caption_lower or "asmr" in transcript.lower():
+                    detected_stype = "asmr"
+                elif transcript and len(transcript) > 10 and not ("không có lời thoại" in spoken_hook.lower() or "background music only" in spoken_hook.lower()):
+                    detected_stype = "voiceover"
+                else:
+                    detected_stype = "music_only"
+
+                # Save to DB
+                db.update_multimodal_analysis(video_id, {
+                    "transcript": transcript,
+                    "spoken_hook": spoken_hook,
+                })
+                db.update_video_sound(video_id, detected_stype)
+                success += 1
+
+            finally:
+                if temp_vid and temp_vid.exists():
+                    try:
+                        temp_vid.unlink()
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.error(f"Error transcribing {video_id}: {e}")
+            failed += 1
+
+    result = {
+        "keyword": keyword,
+        "scope": scope,
+        "total_pending": total,
+        "success": success,
+        "failed": failed,
+    }
+    logger.info(f"Batch transcribe complete: {result}")
+    return result
+
+
+def batch_extract_and_classify(keyword: str, progress_callback=None) -> dict:
+    """
+    Batch extract kf1 keyframe and classify visual content type for ALL videos
+    in a niche that don't yet have visual_style classification.
+    
+    Args:
+        keyword: Niche keyword to process
+        progress_callback: Optional callable(done, total, message) for realtime progress
+    
+    Returns: Summary dict with content type distribution
+    """
+    from backend import db
+    from collections import Counter
+
+    conn = db.get_db()
+    cursor = conn.cursor()
+
+    # Find videos that need visual classification
+    cursor.execute("""
+    SELECT v.video_id, v.url, v.caption, v.duration
+    FROM videos v
+    LEFT JOIN analysis_reviews ar ON v.video_id = ar.video_id
+    WHERE v.keyword = ?
+      AND (ar.visual_style IS NULL OR ar.visual_style = '' OR ar.visual_style = 'Standard' OR ar.video_id IS NULL)
+    ORDER BY v.views DESC
+    """, (keyword,))
+    pending = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    total = len(pending)
+    done = 0
+    success = 0
+    failed = 0
+    style_counter = Counter()
+
+    logger.info(f"Batch keyframe classify: {total} videos pending for '{keyword}'")
+
+    for vid_info in pending:
+        video_id = vid_info["video_id"]
+        video_url = vid_info["url"]
+        caption = vid_info.get("caption", "")
+        duration = vid_info.get("duration", 15.0) or 15.0
+
+        done += 1
+        if progress_callback:
+            progress_callback(done, total, f"Đang phân loại hình ảnh {done}/{total}: {video_id[:20]}...")
+
+        try:
+            temp_vid = download_video_stream(video_url, video_id)
+            if not temp_vid or not temp_vid.exists():
+                logger.warning(f"Skipping {video_id}: download failed")
+                failed += 1
+                continue
+
+            try:
+                # Extract only kf1 (opening frame) for efficiency
+                kf1_path = KEYFRAMES_DIR / f"{video_id}_kf1.jpg"
+                cmd = ["ffmpeg", "-y", "-ss", "1.0", "-i", str(temp_vid), "-vframes", "1", "-q:v", "3", str(kf1_path)]
+                subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+
+                if kf1_path.exists():
+                    # Classify with Qwen-VL
+                    vision_res = analyze_keyframes_with_qwen([str(kf1_path)], caption=caption)
+                    visual_style = vision_res.get("visual_style", "Standard")
+                    style_counter[visual_style] += 1
+
+                    # Save to DB
+                    keyframe_urls = [f"/api/keyframe/{video_id}_kf1.jpg"]
+                    db.update_multimodal_analysis(video_id, {
+                        "visual_hook": vision_res.get("visual_hook", ""),
+                        "setting": vision_res.get("setting", ""),
+                        "on_screen_text": vision_res.get("on_screen_text", ""),
+                        "visual_style": visual_style,
+                        "keyframes": keyframe_urls,
+                    })
+                    success += 1
+                else:
+                    failed += 1
+
+            finally:
+                if temp_vid and temp_vid.exists():
+                    try:
+                        temp_vid.unlink()
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            logger.error(f"Error classifying {video_id}: {e}")
+            failed += 1
+
+    # Build content type distribution
+    total_classified = sum(style_counter.values())
+    content_types = []
+    for style_name, count in style_counter.most_common():
+        content_types.append({
+            "type": style_name,
+            "count": count,
+            "pct": round((count / max(1, total_classified)) * 100, 1)
+        })
+
+    result = {
+        "keyword": keyword,
+        "total_pending": total,
+        "success": success,
+        "failed": failed,
+        "content_types": content_types,
+        "total_classified": total_classified
+    }
+    logger.info(f"Batch keyframe classify complete: {result}")
+    return result
+

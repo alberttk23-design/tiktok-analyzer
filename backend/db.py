@@ -278,6 +278,48 @@ def init_db():
     SELECT DISTINCT keyword FROM videos WHERE keyword IS NOT NULL AND keyword != ''
     """)
 
+    # AI-Driven Dynamic VoC Clusters (replaces hardcoded 6-pillar system)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS voc_ai_clusters (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL,
+        cluster_name TEXT NOT NULL,
+        cluster_description TEXT DEFAULT '',
+        comment_count INTEGER DEFAULT 0,
+        percentage REAL DEFAULT 0.0,
+        top_quotes_json TEXT DEFAULT '[]',
+        all_comment_ids_json TEXT DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_voc_clusters_kw ON voc_ai_clusters(keyword)")
+
+    # Voice Corpus Aggregate Analysis (batch transcription results)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS voice_corpus_analysis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL UNIQUE,
+        total_transcribed INTEGER DEFAULT 0,
+        total_with_speech INTEGER DEFAULT 0,
+        common_phrases_json TEXT DEFAULT '[]',
+        voice_themes_json TEXT DEFAULT '[]',
+        engine TEXT DEFAULT 'gemini',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    # Visual Corpus Aggregate Analysis (batch keyframe classification results)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS visual_corpus_analysis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        keyword TEXT NOT NULL UNIQUE,
+        total_classified INTEGER DEFAULT 0,
+        content_types_json TEXT DEFAULT '[]',
+        engine TEXT DEFAULT 'qwen-vl',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
     conn.commit()
     conn.close()
 
@@ -2024,6 +2066,163 @@ def get_full_audio_intelligence(keyword: str) -> Dict[str, Any]:
         "top_sounds": top_sounds,
         "voice_corpus": voice_corpus,
         "frameworks": frameworks
+    }
+
+
+# ---------------------------------------------------------------------------
+# VoC AI Dynamic Clusters CRUD
+# ---------------------------------------------------------------------------
+
+def save_voc_ai_clusters(keyword: str, clusters_data: list):
+    """Save AI-generated VoC clusters, replacing any previous clusters for this keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM voc_ai_clusters WHERE keyword = ?", (keyword,))
+    for c in clusters_data:
+        cursor.execute("""
+        INSERT INTO voc_ai_clusters (keyword, cluster_name, cluster_description, comment_count, percentage, top_quotes_json, all_comment_ids_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            keyword,
+            c.get("name", "Khác"),
+            c.get("description", ""),
+            c.get("count", 0),
+            c.get("percentage", 0.0),
+            json.dumps(c.get("top_quotes", []), ensure_ascii=False),
+            json.dumps(c.get("all_comment_ids", []))
+        ))
+    conn.commit()
+    conn.close()
+
+
+def get_voc_ai_clusters(keyword: str) -> dict:
+    """Get AI-generated VoC clusters for a keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT cluster_name, cluster_description, comment_count, percentage, top_quotes_json, created_at
+    FROM voc_ai_clusters WHERE keyword = ? ORDER BY comment_count DESC
+    """, (keyword,))
+    rows = cursor.fetchall()
+    conn.close()
+    if not rows:
+        return None
+    clusters = []
+    for r in rows:
+        clusters.append({
+            "name": r["cluster_name"],
+            "description": r["cluster_description"],
+            "count": r["comment_count"],
+            "percentage": r["percentage"],
+            "top_quotes": json.loads(r["top_quotes_json"] or "[]"),
+        })
+    return {
+        "clusters": clusters,
+        "generated_at": rows[0]["created_at"] if rows else None,
+        "total_clusters": len(clusters)
+    }
+
+
+def delete_voc_ai_clusters(keyword: str):
+    """Delete AI clusters when keyword is removed."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM voc_ai_clusters WHERE keyword = ?", (keyword,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Voice Corpus Analysis CRUD
+# ---------------------------------------------------------------------------
+
+def save_voice_corpus(keyword: str, data: dict):
+    """Save or update voice corpus analysis for a keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO voice_corpus_analysis (keyword, total_transcribed, total_with_speech, common_phrases_json, voice_themes_json, engine)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON CONFLICT(keyword) DO UPDATE SET
+        total_transcribed = excluded.total_transcribed,
+        total_with_speech = excluded.total_with_speech,
+        common_phrases_json = excluded.common_phrases_json,
+        voice_themes_json = excluded.voice_themes_json,
+        engine = excluded.engine,
+        created_at = CURRENT_TIMESTAMP
+    """, (
+        keyword,
+        data.get("total_transcribed", 0),
+        data.get("total_with_speech", 0),
+        json.dumps(data.get("common_phrases", []), ensure_ascii=False),
+        json.dumps(data.get("voice_themes", []), ensure_ascii=False),
+        data.get("engine", "gemini")
+    ))
+    conn.commit()
+    conn.close()
+
+
+def get_voice_corpus(keyword: str) -> dict:
+    """Get voice corpus analysis for a keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM voice_corpus_analysis WHERE keyword = ?", (keyword,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "keyword": row["keyword"],
+        "total_transcribed": row["total_transcribed"],
+        "total_with_speech": row["total_with_speech"],
+        "common_phrases": json.loads(row["common_phrases_json"] or "[]"),
+        "voice_themes": json.loads(row["voice_themes_json"] or "[]"),
+        "engine": row["engine"],
+        "generated_at": row["created_at"]
+    }
+
+
+# ---------------------------------------------------------------------------
+# Visual Corpus Analysis CRUD
+# ---------------------------------------------------------------------------
+
+def save_visual_corpus(keyword: str, data: dict):
+    """Save or update visual corpus analysis for a keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+    INSERT INTO visual_corpus_analysis (keyword, total_classified, content_types_json, engine)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(keyword) DO UPDATE SET
+        total_classified = excluded.total_classified,
+        content_types_json = excluded.content_types_json,
+        engine = excluded.engine,
+        created_at = CURRENT_TIMESTAMP
+    """, (
+        keyword,
+        data.get("total_classified", 0),
+        json.dumps(data.get("content_types", []), ensure_ascii=False),
+        data.get("engine", "qwen-vl")
+    ))
+    conn.commit()
+    conn.close()
+
+
+def get_visual_corpus(keyword: str) -> dict:
+    """Get visual corpus analysis for a keyword."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM visual_corpus_analysis WHERE keyword = ?", (keyword,))
+    row = cursor.fetchone()
+    conn.close()
+    if not row:
+        return None
+    return {
+        "keyword": row["keyword"],
+        "total_classified": row["total_classified"],
+        "content_types": json.loads(row["content_types_json"] or "[]"),
+        "engine": row["engine"],
+        "generated_at": row["created_at"]
     }
 
 
