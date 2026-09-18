@@ -74,22 +74,26 @@ PILLAR_TAXONOMY = {
         "psychological_driver": "Tâm lý sợ hớ giá (FOMO) và khao khát khẳng định mình là người tiêu dùng thông thái săn được món hời chất lượng."
     },
     "decision_confusion": {
-        "title": "4. Tê Liệt Ra Quyết Định Mua (Pre-Purchase Decision Paralysis)",
-        "badge": "📐 Bối Rối Chọn Loại / Size",
+        "title": "4. Chậu Cây, Kích Cỡ & Phụ Kiện Đi Kèm (Pots, Planters & Sizing)",
+        "badge": "🪴 Chậu Cây & Phụ Kiện / Size",
         "color": "sky",
         "icon": "HelpCircle",
-        "description": "Khách hàng muốn mua nhưng phân vân giữa các phân loại (kích cỡ, màu sắc, phiên bản, thông số kỹ thuật), chưa biết cái nào phù hợp.",
+        "description": "Tâm lý băn khoăn về chậu cắm cây (pot, planter, basket, base), chậu kèm theo có sẵn không, mua chậu ngoài ở đâu và chiều cao cây (5ft-8ft) so với không gian.",
         "keywords": [
-            # English
+            # English - Pot, Planter, Container, Basket, Base & Accessories
+            "pot", "planter", "basket", "container", "vase", "urn", "base", "stand", "moss",
+            "dirt", "rocks", "stones", "repot", "repotting", "planters", "pots", "baskets",
+            # English - Size, Height & Space Fit
             "size", "height", "fit", "which", "recommend", "how to choose", "tall", "small", "big",
             "large", "medium", "inch", "cm", "color", "shade", "type", "version", "model",
-            "ceiling", "corner", "room", "planter", "pot", "basket", "how tall", "what size",
+            "ceiling", "corner", "room", "how tall", "what size", "5ft", "6ft", "7ft", "8ft", "9ft",
             # Vietnamese
+            "chậu", "bình", "giỏ", "giỏ cói", "đôn", "đôn cây", "rêu", "sỏi", "đá",
             "size", "kích thước", "chiều cao", "vừa", "hợp", "chọn", "loại nào", "màu nào",
-            "mẫu nào", "tư vấn", "cỡ nào", "nên mua", "phân vân", "khuyên", "trần", "chậu",
-            "có vừa không", "cao bao nhiêu", "size gì"
+            "mẫu nào", "tư vấn", "cỡ nào", "nên mua", "phân vân", "khuyên", "trần",
+            "có vừa không", "cao bao nhiêu", "size gì", "có kèm chậu không"
         ],
-        "psychological_driver": "Sợ đặt sai kích cỡ hoặc màu sắc không phù hợp nhu cầu, mất công hoàn trả hoặc bỏ xó không dùng được."
+        "psychological_driver": "Cây giả xuất xưởng thường chỉ có chậu đen đúc bê tông nhỏ xíu không thể tự đứng vững hoặc rất thô. Khách hàng sợ mua chậu decor ngoài quá đắt (lên tới $499) hoặc không biết chọn chậu size nào vừa cây."
     },
     "styling_hacks": {
         "title": "5. Hướng Dẫn Sử Dụng & Bí Quyết Thực Tế (Usage, Styling & Hacks)",
@@ -289,44 +293,49 @@ def analyze_voc_deep(keyword: str, db_path: str = "data/tiktok.db") -> Dict[str,
     # ---------------------------------------------------------------------------
     sourcing_recommendations = []
 
-    # Recommendation 1: From the #1 friction pillar
-    top_p1 = sorted_frictions[0]
-    p1_quotes = pillars_result[top_p1]["top_quotes"]
-    p1_sample = p1_quotes[0]["text"] if p1_quotes else f"Thắc mắc về chất lượng và độ bền thực tế của {keyword_clean}"
-    p1_count = pillars_result[top_p1]["count"]
-    sourcing_recommendations.append({
-        "id": "sourcing_directive_1",
-        "pillar": pillars_result[top_p1]["badge"],
-        "problem": f"Khách hàng lo ngại lớn nhất về: '{p1_sample[:90]}' ({p1_count} thảo luận trong nhóm {pillars_result[top_p1]['title'].split('(')[0].strip()}).",
-        "technical_solution": f"Gia cố kết cấu và nâng chuẩn kiểm định vật liệu xuất xưởng cho {keyword_clean}. Bổ sung tem chứng nhận tiêu chuẩn hoặc seal niêm phong chống trầy xước.",
-        "commercial_impact": "Triệt tiêu rào cản mua hàng số 1; giảm tỷ lệ đổi trả do lỗi vật lý/thất vọng sau mở hộp xuống dưới 1.5%."
-    })
+    # Map each friction pillar to concrete commercial and technical solutions
+    pillar_solution_templates = {
+        "decision_confusion": {
+            "title": "🪴 Combo Trọn Gói: Chậu, Bình & Phụ Kiện (Pot & Planter Pairing)",
+            "problem_fn": lambda sample, cnt: f"Khách băn khoăn dồn dập về Chậu cắm cây & Phụ kiện ({cnt} bình luận): '{sample[:90]}'. Rào cản là cây chỉ có chậu đen nhỏ xíu, còn chậu decor mua ngoài đắt tới $499.",
+            "solution": f"Bán kèm Combo All-in-One: Tùy chọn mua {keyword_clean} kèm chậu sứ mờ (Ceramic planter) hoặc giỏ cói chuẩn size + 1 túi rêu giả (Spanish moss) phủ gốc để che chậu nhựa.",
+            "impact": "Tăng giá trị đơn hàng trung bình (AOV) +30% đến +40%. Giải quyết triệt để rào cản 'mua cây về không có chậu cắm hoặc phải tốn thêm tiền mua chậu đắt ngoài'."
+        },
+        "aesthetic_skepticism": {
+            "title": "👁️ Khắc Phục Nỗi Sợ Lá Nhựa Giả (Realism & Anti-Plastic)",
+            "problem_fn": lambda sample, cnt: f"Khách hoài nghi chất liệu và sợ nhìn như đồ nhựa rẻ tiền ({cnt} bình luận): '{sample[:90]}'.",
+            "solution": f"Nâng cấp vật liệu: Sử dụng thân gỗ thật tự nhiên (Real wood trunk) kết hợp lá vải lụa ép mờ (Matte silk fabric) có gân in 3D thay vì nhựa đúc bóng loáng.",
+            "impact": "Đập tan định kiến 'cây giả hàng mã', tỷ lệ khen ngợi chất lượng trong comment đạt trên 85%, giảm tỷ lệ đổi trả xuống dưới 1%."
+        },
+        "competitor_comparison": {
+            "title": "🏷️ Chiến Lược Bản Dupe Giá Hời (Dupe Value Strategy)",
+            "problem_fn": lambda sample, cnt: f"Khách so sánh giá và tìm kiếm bản Dupe giá tốt ({cnt} bình luận): '{sample[:90]}'.",
+            "solution": f"Định vị 'Bản Dupe Hoàn Hảo của Pottery Barn / West Elm': Mức giá bán lẻ chỉ bằng 1/3 giá showroom cao cấp nhưng độ hoàn thiện đạt 90%.",
+            "impact": "Tạo hiệu ứng 'săn món hời thông thái' (Smart Buyer FOMO), kích thích chốt đơn tự nhiên từ tệp khách hàng nhạy cảm về giá."
+        },
+        "physical_friction": {
+            "title": "⚠️ Gia Cố Đế Chống Đổ & An Toàn (Anti-Tip & Durability)",
+            "problem_fn": lambda sample, cnt: f"Khách lo ngại rủi ro đổ ngã, bám bụi hoặc thú cưng/trẻ nhỏ nghịch hỏng ({cnt} bình luận): '{sample[:90]}'.",
+            "solution": f"Gia cố đế đúc xi măng nặng chống lật đổ (Heavy anti-tip base) cho {keyword_clean}, tặng kèm khăn vi sợi chuyên dụng lau bụi nhanh cho lá.",
+            "impact": "Tạo sự an tâm tuyệt đối cho các gia đình có trẻ nhỏ và thú cưng (Pet-friendly & Kid-safe)."
+        }
+    }
 
-    # Recommendation 2: From the #2 friction pillar
-    top_p2 = sorted_frictions[1]
-    p2_quotes = pillars_result[top_p2]["top_quotes"]
-    p2_sample = p2_quotes[0]["text"] if p2_quotes else f"So sánh giá và tính thẩm mỹ so với đối thủ"
-    p2_count = pillars_result[top_p2]["count"]
-    sourcing_recommendations.append({
-        "id": "sourcing_directive_2",
-        "pillar": pillars_result[top_p2]["badge"],
-        "problem": f"Thắc mắc phổ biến: '{p2_sample[:90]}' ({p2_count} bình luận băn khoăn về độ chân thực/giá thành).",
-        "technical_solution": f"Tối ưu hoàn thiện bề mặt mờ nhám (Matte finish), cải tiến màu sắc tự nhiên và đóng gói hộp in màu chuẩn quà tặng cho {keyword_clean}.",
-        "commercial_impact": "Khách quay video unboxing hữu cơ (Organic UGC) tăng gấp 3 lần; tỷ lệ khen ngợi chất lượng trong comment đạt trên 85%."
-    })
-
-    # Recommendation 3: From decision confusion / bundle upsell
-    p_dec = "decision_confusion"
-    p_dec_quotes = pillars_result[p_dec]["top_quotes"]
-    p_dec_sample = p_dec_quotes[0]["text"] if p_dec_quotes else f"Khách lúng túng không biết chọn phân loại nào"
-    p_dec_count = pillars_result[p_dec]["count"]
-    sourcing_recommendations.append({
-        "id": "sourcing_directive_3",
-        "pillar": "Combo Trọn Gói & Upsell",
-        "problem": f"Nhiều khách hàng phân vân chọn phân loại hoặc hỏi phụ kiện đi kèm: '{p_dec_sample[:85]}' ({p_dec_count} bình luận).",
-        "technical_solution": f"Thiết kế Combo All-in-One: Đóng gói {keyword_clean} kèm bộ phụ kiện thiết yếu đầy đủ trong 1 hộp, có hướng dẫn sử dụng nhanh (Quick Guide) 3 bước.",
-        "commercial_impact": "Tăng giá trị đơn hàng trung bình (AOV) thêm +30% đến +40%. Khách nhận hàng sẵn sàng sử dụng ngay, không phải đi tìm mua thêm phụ kiện ngoài."
-    })
+    # Generate up to 3 most critical directives based on sorted frictions
+    for idx, pid in enumerate(sorted_frictions[:3]):
+        p_info = pillars_result[pid]
+        p_count = p_info["count"]
+        p_quotes = p_info["top_quotes"]
+        p_sample = p_quotes[0]["text"] if p_quotes else f"Thắc mắc về {p_info['title']}"
+        tpl = pillar_solution_templates.get(pid)
+        if tpl:
+            sourcing_recommendations.append({
+                "id": f"sourcing_directive_{idx + 1}",
+                "pillar": tpl["title"],
+                "problem": tpl["problem_fn"](p_sample, p_count),
+                "technical_solution": tpl["solution"],
+                "commercial_impact": tpl["impact"]
+            })
 
     # ---------------------------------------------------------------------------
     # DYNAMIC 5 CLAPBACK VIDEO SCRIPTS (Generated from actual customer objections)
@@ -344,15 +353,7 @@ def analyze_voc_deep(keyword: str, db_path: str = "data/tiktok.db") -> Dict[str,
     candidate_comments.sort(key=lambda x: x[1]["likes"], reverse=True)
 
     clapback_scripts = []
-    script_configs = [
-        ("Thử Thách Kiểm Chứng Độ Bền (Real Stress Test)", "20 giây", "Chống Đổ Vỡ / Hư Hỏng"),
-        ("Thử Thách Cận Cảnh Không Filter (Macro Proof Test)", "18 giây", "Chất Liệu & Thẩm Mỹ"),
-        ("So Sánh Thẳng Thắn Với Hàng Đắt Tiền (Dupe Value Test)", "25 giây", "Giá Bán & Độ Đáng Tiền"),
-        ("Bí Quyết Sử Dụng Chuẩn Đẹp (The 3-Step Setup Secret)", "22 giây", "Hướng Dẫn Thực Tế"),
-        ("Công Thức Chọn Chuẩn Nhu Cầu (The Selection Guide)", "24 giây", "Giải Quyết Bối Rối Mua")
-    ]
-
-    for idx, (config_title, duration, default_obj) in enumerate(script_configs):
+    for idx in range(min(5, max(1, len(candidate_comments)))):
         if idx < len(candidate_comments):
             c_pillar, c_item = candidate_comments[idx]
             sticker_txt = c_item["text"]
@@ -361,18 +362,40 @@ def analyze_voc_deep(keyword: str, db_path: str = "data/tiktok.db") -> Dict[str,
         else:
             sticker_txt = f"Liệu {keyword_clean} này có thực sự đáng tiền như trên video không?"
             sticker_likes = max(10, 45 - idx * 7)
-            target_obj = default_obj
+            target_obj = "Chất Lượng & Trải Nghiệm"
+
+        lower_sticker = sticker_txt.lower()
+        if any(k in lower_sticker for k in ["pot", "planter", "basket", "chậu"]):
+            c_title = "Video Mẹo Chọn Chậu Sang Xịn Giá Dưới $30 (Under $30 Planter Hack)"
+            hook = f"Dán ảnh chụp sticker comment '{sticker_txt[:70]}'. Creator chỉ tay vào comment: 'Đừng dại gì mua chậu mấy trăm đô! Mình chỉ cho các bạn mẹo chọn chậu cực sang mà giá chưa tới 30 đô!'"
+            proof = f"Creator lấy một chiếc giỏ cói hoặc chậu gốm giá rẻ, đặt cả chậu cây vào trong, phủ thêm lớp rêu giả (Spanish moss) lên trên: 'Nhìn xem, sang không thua gì decor showroom 5 sao mà tiết kiệm cả đống tiền!'"
+            cta = "'Link cả cây và mẫu chậu giá rẻ này mình ghim ở bio / góc trái màn hình nha!'"
+        elif any(k in lower_sticker for k in ["plastic", "fake", "shiny", "real", "realistic", "natural", "nhựa", "giả", "bóng", "thật"]):
+            c_title = "Video Soi Cận Cảnh Không Filter (Realism & Macro Stress Test)"
+            hook = f"Dán sticker comment: '{sticker_txt[:70]}'. Creator: 'Nhiều bạn thắc mắc nhìn cây ngoài đời có thật không hay trông như đồ nhựa đểu? Lại gần đây mình soi cận cảnh cho xem!'"
+            proof = f"Camera dí sát macro vào lá và thân cây: vuốt nhẹ lá không có tiếng sột soạt của nilon, bẻ cong cành cây êm ái, cho thấy thân gỗ có vân nứt tự nhiên 100%."
+            cta = "'Chuẩn chỉnh từng cành lá luôn! Ai muốn xem mẫu này thì click ngay giỏ hàng bên dưới nhé!'"
+        elif any(k in lower_sticker for k in ["price", "cost", "dollar", "$", "expensive", "cheap", "giá"]):
+            c_title = "Video So Sánh Thẳng Thắn Với Hàng Đắt Tiền (Dupe Value Test)"
+            hook = f"Dán sticker comment: '{sticker_txt[:70]}'. Creator: 'Tại sao phải bỏ ra 400 đô cho một chậu cây decor khi cây này giá chỉ bằng 1/3 mà chất lượng y hệt?'"
+            proof = f"Đặt 2 khung hình so sánh: Một bên là hàng showroom đắt đỏ, một bên là {keyword_clean}. So sánh độ dày tán lá, chiều cao và độ chắc chắn của thân cây."
+            cta = "'Tiết kiệm ngay cả triệu đồng mà nhà vẫn đẹp sang chảnh, link ưu đãi mình để ở đây nha!'"
+        else:
+            c_title = f"Video Giải Mã Thắc Mắc #{idx + 1} (Customer FAQ Breakdown)"
+            hook = f"Dán ảnh chụp sticker comment góc trái: '{sticker_txt[:70]}'. Creator: 'Rất nhiều bạn hỏi câu này, để mình giải đáp và test thực tế luôn cho mọi người!'"
+            proof = f"Trực tiếp thao tác trên {keyword_clean}: thử thách độ bền, uốn tạo dáng xòe tán cây tự nhiên và đặt vào góc phòng khách để chứng minh công năng."
+            cta = "'Đừng để bị mua hớ! Link đúng phiên bản chuẩn chất lượng này mình ghim ở bio / góc màn hình nha!'"
 
         clapback_scripts.append({
             "id": f"clapback_script_{idx + 1}",
             "target_objection": target_obj,
             "sticker_comment": sticker_txt[:120],
             "comment_likes": sticker_likes,
-            "concept_title": f"Video {config_title}",
-            "duration": duration,
-            "hook_0_3s": f"Dán ảnh chụp sticker comment góc trái màn hình. Creator chỉ tay vào comment: 'Nhiều bạn thắc mắc câu này quá, để mình làm bài test thực tế cho xem luôn!'",
-            "proof_4_12s": f"Quay macro cận cảnh chất lượng thật của {keyword_clean} dưới ánh sáng tự nhiên. Trực tiếp thực hiện thao tác chứng minh: test độ bền, cho thấy từng chi tiết sắc nét và cảm giác sử dụng chân thực.",
-            "cta_13_18s": f"'Đừng để bị mua hớ! Link đúng phiên bản chuẩn chất lượng này mình ghim ở bio / góc trái màn hình nha mọi người!'"
+            "concept_title": c_title,
+            "duration": "20 giây",
+            "hook_0_3s": hook,
+            "proof_4_12s": proof,
+            "cta_13_18s": cta
         })
 
     return {
