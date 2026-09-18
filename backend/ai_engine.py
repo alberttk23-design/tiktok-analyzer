@@ -242,9 +242,9 @@ def build_fallback_review(video, keyword, comment_insight=None):
     else:
         sound_type_label = {
             "voiceover": "Thoại người thật (Voiceover)",
-            "voice_with_music": "Thoại kèm nhạc nền",
-            "asmr": "Âm thanh ASMR trải nghiệm",
-            "music_only": "Nhạc nền xu hướng",
+            "voice_with_music": "Thoại kèm nhạc nền (Voice + BGM)",
+            "asmr": "Âm thanh ASMR thực tế",
+            "music_only": "Nhạc nền / BGM (Ca khúc / Không thoại)",
             "original_sound": "Âm thanh gốc creator"
         }.get(video.get("sound_type", "unknown"), "Âm thanh tự nhiên")
 
