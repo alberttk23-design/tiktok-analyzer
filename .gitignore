@@ -46,3 +46,7 @@ data/*.db-shm
 # Environment
 .env
 .env.local
+
+# Generated Exports
+exports/*.pdf
+exports/*.csv

@@ -776,6 +776,35 @@ def export_koc_csv(keyword: Optional[str] = Query(None)):
     )
 
 
+@app.get("/api/export/pdf")
+def export_master_report_pdf(keyword: Optional[str] = Query(None)):
+    """
+    Generate and stream an A4 Director-Level Executive Strategy Report as a PDF file.
+    """
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+
+    from backend.pdf_exporter import generate_master_pdf_report
+    pdf_bytes, filename = generate_master_pdf_report(kw)
+
+    try:
+        exports_dir = BASE_DIR / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        (exports_dir / filename).write_bytes(pdf_bytes)
+    except Exception as e:
+        print(f"[Export] Notice saving local PDF: {e}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )
+
+
 
 @app.get("/api/keyframe/{filename}")
 def get_keyframe(filename: str):

@@ -50,7 +50,6 @@ import {
   Music,
   Headphones,
   Volume2,
-  Printer,
   Calendar,
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
@@ -431,6 +430,7 @@ function App() {
   // Executive Director Report states
   const [copiedExecutiveReport, setCopiedExecutiveReport] = useState<boolean>(false);
   const [copiedScriptIdx, setCopiedScriptIdx] = useState<number | null>(null);
+  const [exportingPdf, setExportingPdf] = useState<boolean>(false);
 
   const pollingRef = useRef<any>(null);
 
@@ -1430,8 +1430,17 @@ ${data.master_analysis.summary}\n`;
     setTimeout(() => setCopiedExecutiveReport(false), 2500);
   }
 
-  function handlePrintExecutiveReport() {
-    window.print();
+  function handleExportPdfReport() {
+    if (!keyword.trim()) return;
+    setExportingPdf(true);
+    const downloadUrl = `${API_BASE}/api/export/pdf?keyword=${encodeURIComponent(keyword.trim())}`;
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `Bao_Cao_Chien_Luoc_TikTok_${keyword.trim().replace(/\\s+/g, "_")}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setExportingPdf(false), 2500);
   }
 
   function handleCopySingleScript(script: any, idx: number) {
@@ -2088,12 +2097,22 @@ ${data.master_analysis.summary}\n`;
                     </button>
 
                     <button
-                      onClick={handlePrintExecutiveReport}
-                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
-                      title="In hoặc Xuất PDF báo cáo chuẩn A4 để nộp báo cáo"
+                      onClick={handleExportPdfReport}
+                      disabled={exportingPdf}
+                      className="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-red-600/25 transition cursor-pointer disabled:opacity-50"
+                      title="Tải ngay file PDF A4 chuẩn chuyên gia để nộp cho sếp"
                     >
-                      <Printer size={14} className="text-sky-400" />
-                      <span>🖨️ In / Xuất PDF (A4)</span>
+                      {exportingPdf ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" />
+                          <span>Đang tạo PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download size={14} />
+                          <span>📥 Xuất File PDF Báo Cáo</span>
+                        </>
+                      )}
                     </button>
                   </>
                 )}
