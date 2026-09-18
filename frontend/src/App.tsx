@@ -1025,14 +1025,14 @@ ${data.master_analysis.summary}\n`;
       badge = (
         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-pink-950/90 text-pink-300 border-pink-600/60 flex items-center gap-1 shadow-sm">
           <Music size={10} className="text-pink-400" />
-          <span>🎵 Nhạc Trend</span>
+          <span>🎵 BGM / Nhạc Nền</span>
         </span>
       );
     } else if (stype === "asmr") {
       badge = (
         <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-emerald-950/90 text-emerald-300 border-emerald-600/60 flex items-center gap-1 shadow-sm">
           <Volume2 size={10} className="text-emerald-400" />
-          <span>🤫 ASMR</span>
+          <span>🤫 ASMR Thật</span>
         </span>
       );
     }
@@ -3381,10 +3381,10 @@ ${data.master_analysis.summary}\n`;
                 </span>
                 {[
                   { id: "all", label: "Tất cả âm thanh" },
-                  { id: "voiceover", label: "🎙️ Voiceover" },
-                  { id: "voice_with_music", label: "🎧 Voice + BGM" },
-                  { id: "music_only", label: "🎵 Nhạc Trend" },
-                  { id: "asmr", label: "🤫 ASMR" },
+                  { id: "voiceover", label: "🎙️ Voiceover (Lời thoại)" },
+                  { id: "music_only", label: "🎵 BGM (Thuần nhạc nền)" },
+                  { id: "voice_with_music", label: "🎧 Voice + BGM (Nói + Nhạc)" },
+                  { id: "asmr", label: "🤫 ASMR Thật (Âm thanh thực tế)" },
                 ].map((st) => (
                   <button
                     key={st.id}
@@ -4292,9 +4292,9 @@ ${data.master_analysis.summary}\n`;
                   {[
                     { id: "all", label: `Tất cả (${allSounds.length})` },
                     { id: "voiceover", label: `🎙️ Voiceover (${allSounds.filter(s => s.sound_type === 'voiceover').length})` },
+                    { id: "music_only", label: `🎵 BGM / Nhạc Nền (${allSounds.filter(s => s.sound_type === 'music_only').length})` },
                     { id: "voice_with_music", label: `🎧 Voice + BGM (${allSounds.filter(s => s.sound_type === 'voice_with_music').length})` },
-                    { id: "music_only", label: `🎵 Nhạc Trend (${allSounds.filter(s => s.sound_type === 'music_only').length})` },
-                    { id: "asmr", label: `🤫 ASMR (${allSounds.filter(s => s.sound_type === 'asmr').length})` }
+                    { id: "asmr", label: `🤫 ASMR Thật (${allSounds.filter(s => s.sound_type === 'asmr').length})` }
                   ].map((btn) => (
                     <button
                       key={btn.id}

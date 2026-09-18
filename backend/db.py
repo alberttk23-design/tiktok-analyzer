@@ -1572,29 +1572,26 @@ def backfill_audio_data():
                 sound_author = creator
                 sound_original = 1
 
-        # 3. Smart heuristic backfill for existing unclassified records
-        if new_stype in ("unknown", "", None):
-            if "asmr" in caption or "fluff" in caption or "satisfy" in caption:
+        # 3. Smart classification based on genuine audio origin
+        cap_lower = caption.lower()
+        title_lower = sound_title.lower()
+        is_orig = (sound_original == 1) or any(sig in title_lower for sig in ["original sound", "sonido original", "som original", "original ton", "原創音樂", "原聲"])
+        is_commercial_song = not is_orig and bool(sound_title) and not ("original sound" in title_lower or "sonido original" in title_lower)
+        voice_signals = ["review", "unboxing", "honest", "haul", "talking", "story", "pov", "rant", "opinion", "thoughts", "listen", "i bought", "i found", "i ordered", "here is"]
+        has_voice_cues = any(sig in cap_lower or sig in title_lower for sig in voice_signals)
+
+        if is_commercial_song:
+            new_stype = "voice_with_music" if has_voice_cues else "music_only"
+        elif is_orig:
+            if "asmr" in cap_lower or "asmr" in title_lower:
                 new_stype = "asmr"
-                sound_title = sound_title or f"Faux Olive Tree ASMR - {creator}"
-                sound_original = 1
-            elif any(w in caption for w in ["review", "unboxing", "honest", "worth it", "obsessed", "amazon find", "decor tip", "link in bio"]):
-                if duration >= 15:
-                    new_stype = "voice_with_music" if (v["id"] % 2 == 0) else "voiceover"
-                    sound_title = sound_title or (f"original sound - {creator}" if new_stype == "voiceover" else "Aesthetic Home Decor Beats - LoFi Vibe")
-                    sound_author = creator if new_stype == "voiceover" else "Trending TikTok Sound"
-                    sound_original = 1 if new_stype == "voiceover" else 0
-                else:
-                    new_stype = "music_only"
-                    sound_title = sound_title or "Trending Commercial Sound"
-            elif duration < 12:
-                new_stype = "music_only"
-                sound_title = sound_title or "Trending Sound - TikTok Music"
             else:
-                new_stype = "voice_with_music" if (v["id"] % 3 == 0) else "voiceover"
-                sound_title = sound_title or f"original sound - {creator}"
-                sound_author = creator
-                sound_original = 1 if new_stype == "voiceover" else 0
+                new_stype = "voiceover"
+        else:
+            new_stype = "music_only"
+
+        sound_title = sound_title or f"original sound - {creator}"
+        sound_author = sound_author or creator
 
         cursor.execute("""
         UPDATE videos SET
@@ -1613,13 +1610,12 @@ def backfill_audio_data():
 
 def clean_and_enrich_sound_metadata() -> int:
     """
-    Cleans up legacy synthetic placeholder sound names ('Trending Commercial Sound', etc.)
-    and replaces them with genuine creator attribution on TikTok.
+    Cleans up legacy synthetic placeholder sound names and normalizes sound metadata.
     """
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT id, creator, caption, duration_sec, sound_type, sound_title
+        SELECT id, creator, caption, duration_sec, sound_type, sound_title, sound_original
         FROM videos
         WHERE sound_title LIKE '%Trending Sound%'
            OR sound_title LIKE '%Trending Commercial%'
@@ -1636,13 +1632,13 @@ def clean_and_enrich_sound_metadata() -> int:
         stype = r["sound_type"] or "voiceover"
         caption = (r["caption"] or "").lower()
 
-        if "asmr" in caption:
-            new_title = f"Natural ASMR Sound - @{creator}"
+        if "asmr" in caption and r["sound_original"] == 1:
+            new_title = f"ASMR Original Sound - @{creator}"
             new_author = creator
             new_stype = "asmr"
             is_orig = 1
         elif stype == "music_only":
-            new_title = f"TikTok BGM Library - @{creator}"
+            new_title = f"BGM - @{creator}"
             new_author = creator
             new_stype = "music_only"
             is_orig = 0

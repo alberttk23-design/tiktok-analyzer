@@ -258,23 +258,28 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
 
                     caption_lower = caption.lower()
                     title_lower = sound_title.lower()
-                    if "asmr" in caption_lower or "asmr" in title_lower:
-                        sound_type = "asmr"
-                    elif sound_original:
-                        # 'original sound' could be voiceover, ambient, music, etc.
-                        # Use heuristics: if creator name is in sound_author, likely voiceover
-                        # Also check caption for voiceover indicators
-                        voiceover_signals = ["review", "honest", "unboxing", "haul", "talking", "story", "pov", "rant", "opinion", "thoughts"]
-                        if any(sig in caption_lower or sig in title_lower for sig in voiceover_signals):
-                            sound_type = "voiceover"
-                        elif duration >= 15:
-                            sound_type = "voice_with_music"  # Longer originals likely have speaking + music
+
+                    is_orig = sound_original == 1 or any(sig in title_lower for sig in ["original sound", "sonido original", "som original", "original ton", "原創音樂", "原聲"])
+                    is_commercial_song = not is_orig and bool(sound_title) and not ("original sound" in title_lower or "sonido original" in title_lower)
+
+                    voiceover_signals = ["review", "honest", "unboxing", "haul", "talking", "story", "pov", "rant", "opinion", "thoughts", "listen", "i bought", "i found", "i ordered", "here is", "here are"]
+                    has_voice_cues = any(sig in caption_lower or sig in title_lower for sig in voiceover_signals)
+
+                    if is_commercial_song:
+                        # Commercial / Licensed music track from TikTok Library (BGM)
+                        # If video clearly indicates creator speech, mark as voice_with_music, otherwise pure music_only (BGM)
+                        if has_voice_cues:
+                            sound_type = "voice_with_music"
                         else:
-                            sound_type = "original_sound"  # Short originals - ambiguous, mark as original
-                    elif sound_title:
-                        sound_type = "voice_with_music" if duration >= 15 else "music_only"
+                            sound_type = "music_only"
+                    elif is_orig:
+                        # Genuine creator microphone recording (Original Audio)
+                        if "asmr" in caption_lower or "asmr" in title_lower:
+                            sound_type = "asmr"
+                        else:
+                            sound_type = "voiceover"
                     else:
-                        sound_type = "unknown"
+                        sound_type = "music_only"
 
                     discovered_new_videos[vid] = {
                         "video_id": vid,
