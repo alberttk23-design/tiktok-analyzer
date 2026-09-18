@@ -705,7 +705,42 @@ def generate_gemini_master_analysis(keyword: str, api_key: str = None) -> dict:
     gemini_data = None
 
     if resolved_key:
-        candidate_models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+        import time
+        t_start = time.time()
+        # Dynamic discovery of supported models directly from Google AI API
+        available_models = []
+        try:
+            m_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={resolved_key}"
+            with urllib.request.urlopen(m_url, timeout=10) as m_resp:
+                m_json = json.loads(m_resp.read().decode("utf-8"))
+                for m in m_json.get("models", []):
+                    m_name = m.get("name", "").replace("models/", "")
+                    methods = m.get("supportedGenerationMethods", [])
+                    if "generateContent" in methods:
+                        available_models.append(m_name)
+            print(f"[AI Engine] Dynamic Google AI models available for this API key: {available_models[:10]}")
+        except Exception as me:
+            print(f"[AI Engine] Model auto-discovery notice: {me}")
+
+        priority_order = [
+            "gemini-3.6-flash",
+            "gemini-2.5-flash",
+            "gemini-2.0-flash",
+            "gemini-2.0-flash-exp",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+            "gemini-flash"
+        ]
+        candidate_models = []
+        for p in priority_order:
+            if p in available_models and p not in candidate_models:
+                candidate_models.append(p)
+        for a in available_models:
+            if a not in candidate_models and ("flash" in a or "gemini" in a):
+                candidate_models.append(a)
+        if not candidate_models:
+            candidate_models = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
+
         for model_name in candidate_models:
             try:
                 print(f"[AI Engine] Calling Google Gemini API with model '{model_name}'...")
@@ -830,7 +865,8 @@ YÊU CẦU: Xuất ra BÁO CÁO CỰC KỲ SÂU SẮC, SẮC BÉN, DÙNG THUẬT
                             gemini_data = parsed
                             gemini_data["ai_model"] = model_name
                             gemini_data["is_live_gemini"] = True
-                            print(f"[AI Engine] Successfully generated live analysis with Gemini ({model_name})!")
+                            elapsed = round(time.time() - t_start, 2)
+                            print(f"[AI Engine] Successfully generated live analysis with Gemini ({model_name}) in {elapsed}s!")
                             break
             except urllib.error.HTTPError as he:
                 err_detail = ""
@@ -843,6 +879,7 @@ YÊU CẦU: Xuất ra BÁO CÁO CỰC KỲ SÂU SẮC, SẮC BÉN, DÙNG THUẬT
                 print(f"[AI Engine] Gemini API notice with '{model_name}': {ge}")
 
     if not gemini_data or not isinstance(gemini_data, dict):
+        print(f"[AI Engine] Using Local Data-Driven Fallback Synthesis for '{keyword}'...")
         # Comprehensive Data-Driven Fallback Director-Level Report (Guaranteed to be 100% Executive-Ready)
         top_creator_views = f"@{top_views_vids[0]['creator']} ({top_views_vids[0]['views']:,} views)" if top_views_vids else "top creator"
         top_creator_saves = f"@{top_saves_vids[0]['creator']} ({top_saves_vids[0]['saves']:,} saves)" if top_saves_vids else "top saver"
