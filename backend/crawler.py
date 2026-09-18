@@ -266,12 +266,9 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
                     has_voice_cues = any(sig in caption_lower or sig in title_lower for sig in voiceover_signals)
 
                     if is_commercial_song:
-                        # Commercial / Licensed music track from TikTok Library (BGM)
-                        # If video clearly indicates creator speech, mark as voice_with_music, otherwise pure music_only (BGM)
-                        if has_voice_cues:
-                            sound_type = "voice_with_music"
-                        else:
-                            sound_type = "music_only"
+                        # Commercial / Licensed music track from TikTok Library (BGM / Song)
+                        # Default to music_only (pure BGM) so silent unboxings with music are not mislabeled as voiceover
+                        sound_type = "music_only"
                     elif is_orig:
                         # Genuine creator microphone recording (Original Audio)
                         if "asmr" in caption_lower or "asmr" in title_lower:

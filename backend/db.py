@@ -1577,11 +1577,8 @@ def backfill_audio_data():
         title_lower = sound_title.lower()
         is_orig = (sound_original == 1) or any(sig in title_lower for sig in ["original sound", "sonido original", "som original", "original ton", "原創音樂", "原聲"])
         is_commercial_song = not is_orig and bool(sound_title) and not ("original sound" in title_lower or "sonido original" in title_lower)
-        voice_signals = ["review", "unboxing", "honest", "haul", "talking", "story", "pov", "rant", "opinion", "thoughts", "listen", "i bought", "i found", "i ordered", "here is"]
-        has_voice_cues = any(sig in cap_lower or sig in title_lower for sig in voice_signals)
-
         if is_commercial_song:
-            new_stype = "voice_with_music" if has_voice_cues else "music_only"
+            new_stype = "music_only"
         elif is_orig:
             if "asmr" in cap_lower or "asmr" in title_lower:
                 new_stype = "asmr"
