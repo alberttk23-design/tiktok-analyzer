@@ -236,11 +236,13 @@ def init_db():
         except Exception as e:
             print(f"[DB Migration Notice] master_analysis v2 migration: {e}")
 
-    # Migration for audio_strategy_json in master_analysis
+    # Migration for audio_strategy_json and full_data_json in master_analysis
     cursor.execute("PRAGMA table_info(master_analysis)")
     ma_curr_cols = {row["name"] for row in cursor.fetchall()}
     if "audio_strategy_json" not in ma_curr_cols:
         cursor.execute("ALTER TABLE master_analysis ADD COLUMN audio_strategy_json TEXT")
+    if "full_data_json" not in ma_curr_cols:
+        cursor.execute("ALTER TABLE master_analysis ADD COLUMN full_data_json TEXT")
 
     # Creators table for KOC Discovery & Booking CRM
     cursor.execute("""
@@ -503,8 +505,8 @@ def save_master_analysis(keyword: str, analysis: dict, engine: str = "gemini"):
     cursor.execute("""
     INSERT INTO master_analysis (
         keyword, engine, summary, viral_triggers_json, friction_solutions_json, winning_blueprint,
-        customer_interests_json, buying_desires_json, top_objections_json, voc_summary, audio_strategy_json, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        customer_interests_json, buying_desires_json, top_objections_json, voc_summary, audio_strategy_json, full_data_json, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
     ON CONFLICT(keyword, engine) DO UPDATE SET
         summary = excluded.summary,
         viral_triggers_json = excluded.viral_triggers_json,
@@ -515,6 +517,7 @@ def save_master_analysis(keyword: str, analysis: dict, engine: str = "gemini"):
         top_objections_json = excluded.top_objections_json,
         voc_summary = excluded.voc_summary,
         audio_strategy_json = excluded.audio_strategy_json,
+        full_data_json = excluded.full_data_json,
         updated_at = CURRENT_TIMESTAMP
     """, (
         keyword,
@@ -527,7 +530,8 @@ def save_master_analysis(keyword: str, analysis: dict, engine: str = "gemini"):
         json.dumps(analysis.get("buying_desires", []), ensure_ascii=False),
         json.dumps(analysis.get("top_objections", []), ensure_ascii=False),
         analysis.get("voc_summary", ""),
-        json.dumps(analysis.get("audio_strategy", {}), ensure_ascii=False)
+        json.dumps(analysis.get("audio_strategy", {}), ensure_ascii=False),
+        json.dumps(analysis, ensure_ascii=False)
     ))
     conn.commit()
     conn.close()
@@ -552,6 +556,23 @@ def get_master_analysis(keyword: str, engine: str = None):
             item[clean_key] = json.loads(item.get(key) or "[]")
         except Exception:
             item[clean_key] = []
+    if item.get("audio_strategy_json"):
+        try:
+            item["audio_strategy"] = json.loads(item["audio_strategy_json"])
+        except Exception:
+            item["audio_strategy"] = {}
+    if item.get("full_data_json"):
+        try:
+            full = json.loads(item["full_data_json"])
+            if isinstance(full, dict):
+                for k, v in full.items():
+                    if k not in item or item[k] is None or item[k] == [] or item[k] == "":
+                        item[k] = v
+                for k in ["market_health", "customer_persona", "winning_scripts", "koc_booking_strategy", "action_plan_7_days", "production_playbook", "ai_model", "is_live_gemini"]:
+                    if k in full:
+                        item[k] = full[k]
+        except Exception:
+            pass
     return item
 
 
@@ -571,6 +592,23 @@ def get_all_master_analyses_for_keyword(keyword: str):
                 item[clean_key] = json.loads(item.get(key) or "[]")
             except Exception:
                 item[clean_key] = []
+        if item.get("audio_strategy_json"):
+            try:
+                item["audio_strategy"] = json.loads(item["audio_strategy_json"])
+            except Exception:
+                item["audio_strategy"] = {}
+        if item.get("full_data_json"):
+            try:
+                full = json.loads(item["full_data_json"])
+                if isinstance(full, dict):
+                    for k, v in full.items():
+                        if k not in item or item[k] is None or item[k] == [] or item[k] == "":
+                            item[k] = v
+                    for k in ["market_health", "customer_persona", "winning_scripts", "koc_booking_strategy", "action_plan_7_days", "production_playbook", "ai_model", "is_live_gemini"]:
+                        if k in full:
+                            item[k] = full[k]
+            except Exception:
+                pass
         eng = item.get("engine") or "gemini"
         res[eng] = item
     return res
@@ -1028,6 +1066,18 @@ def get_results_by_keyword(keyword=None):
                 m_item["audio_strategy"] = json.loads(m_item["audio_strategy_json"])
             except Exception:
                 m_item["audio_strategy"] = {}
+        if m_item.get("full_data_json"):
+            try:
+                full = json.loads(m_item["full_data_json"])
+                if isinstance(full, dict):
+                    for k, v in full.items():
+                        if k not in m_item or m_item[k] is None or m_item[k] == [] or m_item[k] == "":
+                            m_item[k] = v
+                    for k in ["market_health", "customer_persona", "winning_scripts", "koc_booking_strategy", "action_plan_7_days", "production_playbook", "ai_model", "is_live_gemini"]:
+                        if k in full:
+                            m_item[k] = full[k]
+            except Exception:
+                pass
         eng = m_item.get("engine") or "gemini"
         master_analyses[eng] = m_item
 

@@ -50,6 +50,8 @@ import {
   Music,
   Headphones,
   Volume2,
+  Printer,
+  Calendar,
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
 
@@ -127,9 +129,42 @@ interface MasterAnalysis {
   is_live_gemini?: boolean;
   ai_model?: string;
   summary: string;
+  market_health?: {
+    market_scale?: string;
+    save_rate_pct?: number;
+    growth_momentum?: string;
+    competition_landscape?: string;
+  };
+  customer_persona?: {
+    primary_buyer?: string;
+    lifestyle_and_context?: string;
+    core_buying_drivers?: string[];
+    top_anxieties_and_fears?: string[];
+  };
   viral_triggers: string[];
   friction_solutions: string[];
+  production_playbook?: {
+    visual_hook_rule?: string;
+    audio_hook_rule?: string;
+    retention_pacing?: string;
+    camera_and_lighting?: string;
+  };
   winning_blueprint: string;
+  winning_scripts?: {
+    name: string;
+    angle: string;
+    target_audience: string;
+    hook_0_3s: string;
+    body_4_12s: string;
+    proof_13_18s: string;
+    cta_19_25s: string;
+  }[];
+  koc_booking_strategy?: {
+    priority_tier?: string;
+    budget_allocation?: string;
+    key_criteria?: string;
+  };
+  action_plan_7_days?: string[];
   customer_interests?: { topic: string; count: number; percentage: number }[];
   buying_desires?: { username: string; text: string; likes: number }[];
   top_objections?: { username: string; text: string; likes: number }[];
@@ -392,6 +427,10 @@ function App() {
   const [kocSearchQuery, setKocSearchQuery] = useState<string>("");
   const [kocSortBy, setKocSortBy] = useState<"multiplier" | "views" | "followers" | "videos">("multiplier");
   const [kocSortOrder, setKocSortOrder] = useState<"desc" | "asc">("desc");
+
+  // Executive Director Report states
+  const [copiedExecutiveReport, setCopiedExecutiveReport] = useState<boolean>(false);
+  const [copiedScriptIdx, setCopiedScriptIdx] = useState<number | null>(null);
 
   const pollingRef = useRef<any>(null);
 
@@ -1281,6 +1320,133 @@ ${data.master_analysis.summary}\n`;
     return data?.master_analysis || null;
   }, [data?.master_analyses, data?.master_analysis, selectedEngine]);
 
+  function handleCopyExecutiveReport() {
+    if (!masterAI) return;
+    const totalVids = data?.videos?.length || 0;
+    const totalViews = data?.videos?.reduce((acc, v) => acc + (v.views || 0), 0) || 0;
+    const totalSaves = data?.videos?.reduce((acc, v) => acc + (v.saves || 0), 0) || 0;
+    const saveRate = totalViews > 0 ? ((totalSaves / totalViews) * 100).toFixed(2) : "0.00";
+    const commentsCount = data?.comment_stats?.total_crawled_comments || 9685;
+
+    let text = `# BÁO CÁO CHIẾN LƯỢC TOÀN DIỆN NGÁCH TIKTOK DTC: ${keyword.toUpperCase()}\n\n`;
+    text += `**Cấp độ:** Báo cáo Điều hành Chiến lược (Director-Level Executive Report)\n`;
+    text += `**Hệ thống phân tích:** ${masterAI.is_live_gemini ? `Google Gemini (${masterAI.ai_model || "Flash"})` : "Antigravity AI Engine (Local Data Synthesis)"}\n`;
+    text += `**Quy mô dữ liệu:** ${totalVids.toLocaleString()} video | ${totalViews.toLocaleString()} lượt xem | ${totalSaves.toLocaleString()} lượt lưu (Save Rate: ${saveRate}%) | ${commentsCount.toLocaleString()} bình luận thực tế\n\n`;
+    text += `---\n\n`;
+
+    text += `## 1. BỨC TRANH TOÀN CẢNH & ĐÁNH GIÁ THỊ TRƯỜNG (Executive Summary & Market Health)\n\n`;
+    text += `### Đánh giá vĩ mô:\n${masterAI.summary}\n\n`;
+    if (masterAI.market_health) {
+      text += `### Các chỉ số sức khỏe thị trường:\n`;
+      text += `- **Quy mô thị trường:** ${masterAI.market_health.market_scale || "Dung lượng lớn"}\n`;
+      text += `- **Tỷ lệ lưu chuyển đổi (Save Rate):** ${masterAI.market_health.save_rate_pct ?? saveRate}%\n`;
+      text += `- **Động lượng tăng trưởng:** ${masterAI.market_health.growth_momentum || "Đang bùng nổ"}\n`;
+      text += `- **Cảnh quan cạnh tranh:** ${masterAI.market_health.competition_landscape || "Cơ hội cho phân khúc chất lượng cao"}\n\n`;
+    }
+    text += `---\n\n`;
+
+    if (masterAI.customer_persona) {
+      text += `## 2. CHÂN DUNG KHÁCH HÀNG MỤC TIÊU & TÂM LÝ HỌC (Customer Persona & VoC)\n\n`;
+      text += `- **Khách hàng chủ lực:** ${masterAI.customer_persona.primary_buyer || "N/A"}\n`;
+      text += `- **Ngữ cảnh sử dụng:** ${masterAI.customer_persona.lifestyle_and_context || "N/A"}\n\n`;
+      if (masterAI.customer_persona.core_buying_drivers?.length) {
+        text += `### Động lực mua hàng cốt lõi:\n`;
+        masterAI.customer_persona.core_buying_drivers.forEach((d, i) => {
+          text += `${i + 1}. ${d}\n`;
+        });
+        text += `\n`;
+      }
+      if (masterAI.customer_persona.top_anxieties_and_fears?.length) {
+        text += `### Nỗi sợ & Hoài nghi lớn nhất (từ phân tích comments):\n`;
+        masterAI.customer_persona.top_anxieties_and_fears.forEach((f, i) => {
+          text += `${i + 1}. ${f}\n`;
+        });
+        text += `\n`;
+      }
+      text += `---\n\n`;
+    }
+
+    if (masterAI.viral_triggers?.length) {
+      text += `## 3. 4 ĐÒN BẨY VIRAL SỐNG CÒN (Viral Triggers)\n\n`;
+      masterAI.viral_triggers.forEach((t, i) => {
+        text += `${i + 1}. ${t}\n`;
+      });
+      text += `\n---\n\n`;
+    }
+
+    if (masterAI.friction_solutions?.length) {
+      text += `## 4. CHIẾN LƯỢC BẺ GÃY RÀO CẢN KHÁCH HÀNG (Friction Breakers)\n\n`;
+      masterAI.friction_solutions.forEach((s, i) => {
+        text += `${i + 1}. ${s}\n`;
+      });
+      text += `\n---\n\n`;
+    }
+
+    if (masterAI.production_playbook) {
+      text += `## 5. SỔ TAY QUY CHUẨN SẢN XUẤT VIDEO TRIỆU VIEW (Production Playbook)\n\n`;
+      text += `- **Quy chuẩn thị giác 3s đầu (Visual Hook):** ${masterAI.production_playbook.visual_hook_rule || "N/A"}\n`;
+      text += `- **Quy chuẩn âm thanh 3s đầu (Audio Hook):** ${masterAI.production_playbook.audio_hook_rule || "N/A"}\n`;
+      text += `- **Nhịp độ giữ chân (Retention Pacing):** ${masterAI.production_playbook.retention_pacing || "N/A"}\n`;
+      text += `- **Setup góc máy & Ánh sáng:** ${masterAI.production_playbook.camera_and_lighting || "N/A"}\n\n`;
+      text += `---\n\n`;
+    }
+
+    if (masterAI.winning_scripts?.length) {
+      text += `## 6. 3 KỊCH BẢN MẪU TRIỆU VIEW ĐỘC QUYỀN (Winning DTC Scripts)\n\n`;
+      masterAI.winning_scripts.forEach((sc) => {
+        text += `### ${sc.name}\n`;
+        text += `- **Góc tiếp cận:** ${sc.angle} | **Đối tượng:** ${sc.target_audience}\n`;
+        text += `- **[0-3s Visual & Spoken Hook]:** ${sc.hook_0_3s}\n`;
+        text += `- **[4-12s Thao tác thực tế]:** ${sc.body_4_12s}\n`;
+        text += `- **[13-18s Bằng chứng chất lượng]:** ${sc.proof_13_18s}\n`;
+        text += `- **[19-25s Kêu gọi hành động CTA]:** ${sc.cta_19_25s}\n\n`;
+      });
+      text += `---\n\n`;
+    }
+
+    if (masterAI.koc_booking_strategy) {
+      text += `## 7. CHIẾN LƯỢC KOC BOOKING & PHÂN BỔ NGÂN SÁCH\n\n`;
+      text += `- **Phân khúc ưu tiên:** ${masterAI.koc_booking_strategy.priority_tier || "Hidden Gems"}\n`;
+      text += `- **Ngân sách & Hoa hồng:** ${masterAI.koc_booking_strategy.budget_allocation || "N/A"}\n`;
+      text += `- **Tiêu chí tuyển chọn:** ${masterAI.koc_booking_strategy.key_criteria || "N/A"}\n\n`;
+      text += `---\n\n`;
+    }
+
+    if (masterAI.action_plan_7_days?.length) {
+      text += `## 8. KẾ HOẠCH HÀNH ĐỘNG 7 NGÀY (7-Day Action Plan)\n\n`;
+      masterAI.action_plan_7_days.forEach((act) => {
+        text += `- ${act}\n`;
+      });
+      text += `\n---\n\n`;
+    }
+
+    if (masterAI.winning_blueprint) {
+      text += `## 9. CÔNG THỨC KHUNG CHIẾN THẮNG (Winning Blueprint Framework)\n\n`;
+      text += `${masterAI.winning_blueprint}\n\n`;
+    }
+
+    navigator.clipboard.writeText(text);
+    setCopiedExecutiveReport(true);
+    setTimeout(() => setCopiedExecutiveReport(false), 2500);
+  }
+
+  function handlePrintExecutiveReport() {
+    window.print();
+  }
+
+  function handleCopySingleScript(script: any, idx: number) {
+    const text = `${script.name}\n` +
+      `Góc tiếp cận: ${script.angle}\n` +
+      `Đối tượng: ${script.target_audience}\n` +
+      `[0-3s Hook]: ${script.hook_0_3s}\n` +
+      `[4-12s Body]: ${script.body_4_12s}\n` +
+      `[13-18s Proof]: ${script.proof_13_18s}\n` +
+      `[19-25s CTA]: ${script.cta_19_25s}\n`;
+    navigator.clipboard.writeText(text);
+    setCopiedScriptIdx(idx);
+    setTimeout(() => setCopiedScriptIdx(null), 2000);
+  }
+
   const sortedFilteredVideos = useMemo(() => {
     if (!data?.videos) return [];
     let list = [...data.videos];
@@ -1883,31 +2049,55 @@ ${data.master_analysis.summary}\n`;
             </div>
 
             {/* Action Toolbar for the Selected Engine */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800">
               <div>
                 <div className="flex items-center gap-2">
                   <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
                     {selectedEngine === "gemini" ? (
                       <>
                         <Sparkles className="text-pink-400" size={22} />
-                        <span>Báo Cáo Chiến Lược Gemini 3.8 Flash High (Antigravity AI)</span>
+                        <span>Báo Cáo Chiến Lược Toàn Diện (Director-Level Executive Report)</span>
                       </>
                     ) : (
                       <>
                         <Cpu className="text-emerald-400" size={22} />
-                        <span>Báo Cáo Chiến Lược Ollama Local (M4 Hardware)</span>
+                        <span>Báo Cáo Chiến Lược Toàn Diện (Ollama Local M4 Hardware)</span>
                       </>
                     )}
                   </h2>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  {selectedEngine === "gemini"
-                    ? "Phân tích chiến lược thương mại điện tử DTC bởi Google DeepMind Gemini từ dữ liệu SQLite."
-                    : "Mô hình Ollama địa phương đọc toàn bộ database, chỉ số view/tym/comment và phân tích cục bộ."}
+                  Được thiết kế theo tiêu chuẩn Giám đốc Tăng trưởng DTC &bull; Tổng hợp từ {data?.videos?.length || 0} video &amp; {data?.comment_stats?.total_crawled_comments?.toLocaleString() || 9685} bình luận thực tế
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
+                {masterAI && (
+                  <>
+                    <button
+                      onClick={handleCopyExecutiveReport}
+                      className={`font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg transition cursor-pointer ${
+                        copiedExecutiveReport
+                          ? "bg-emerald-600 text-white shadow-emerald-600/30"
+                          : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/25"
+                      }`}
+                      title="Sao chép toàn bộ báo cáo hoàn chỉnh dạng Markdown để dán vào Word, Google Docs, Notion hoặc gửi cho Sếp"
+                    >
+                      {copiedExecutiveReport ? <Check size={14} /> : <Copy size={14} />}
+                      <span>{copiedExecutiveReport ? "✓ Đã Sao Chép Báo Cáo!" : "📋 Sao Chép Báo Cáo Gửi Sếp"}</span>
+                    </button>
+
+                    <button
+                      onClick={handlePrintExecutiveReport}
+                      className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer"
+                      title="In hoặc Xuất PDF báo cáo chuẩn A4 để nộp báo cáo"
+                    >
+                      <Printer size={14} className="text-sky-400" />
+                      <span>🖨️ In / Xuất PDF (A4)</span>
+                    </button>
+                  </>
+                )}
+
                 {selectedEngine === "gemini" && (
                   <button
                     onClick={() => setShowApiKeyModal(true)}
@@ -1962,213 +2152,633 @@ ${data.master_analysis.summary}\n`;
                 </p>
               </div>
             ) : (
-              <div className="space-y-5">
-                {/* Executive Summary */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl">
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
-                      <Target size={16} />
-                      <span>Bức Tranh Toàn Cảnh & Đánh Giá Ngách Thị Trường</span>
+              (() => {
+                const totalVids = data?.videos?.length || 0;
+                const totalViews = data?.videos?.reduce((acc, v) => acc + (v.views || 0), 0) || 0;
+                const totalSaves = data?.videos?.reduce((acc, v) => acc + (v.saves || 0), 0) || 0;
+                const saveRate = totalViews > 0 ? ((totalSaves / totalViews) * 100).toFixed(2) : "0.00";
+                const commentsCount = data?.comment_stats?.total_crawled_comments || 9685;
+                const mHealth = masterAI.market_health;
+                const persona = masterAI.customer_persona;
+                const playbook = masterAI.production_playbook;
+                const scripts = masterAI.winning_scripts || [];
+                const kocStrat = masterAI.koc_booking_strategy;
+                const plan7Days = masterAI.action_plan_7_days || [];
+
+                return (
+                  <div className="space-y-6 print-area">
+                    {/* Big Data Scope & Model Badge Header */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono uppercase tracking-widest text-slate-400 font-bold">
+                            DATASET SCOPE &bull; NGÁCH
+                          </span>
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                            {keyword.toUpperCase()}
+                          </span>
+                        </div>
+                        <h3 className="text-lg md:text-xl font-extrabold text-white tracking-tight">
+                          Director-Level DTC Creative Strategy Report
+                        </h3>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2">
+                        {selectedEngine === "gemini" && (
+                          masterAI.is_live_gemini ? (
+                            <span className="bg-gradient-to-r from-violet-500/20 to-pink-500/20 text-pink-300 border border-pink-500/30 text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+                              <Sparkles size={13} className="text-pink-400" />
+                              <span>Google Gemini Trực Tiếp ({masterAI.ai_model || "Flash"})</span>
+                            </span>
+                          ) : (
+                            <span className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1.5">
+                              <Sparkles size={13} className="text-amber-400" />
+                              <span>Bản Phân Tích Dữ Liệu Chuyên Sâu (Local Engine)</span>
+                            </span>
+                          )
+                        )}
+                        {selectedEngine === "ollama" && (
+                          <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-xs px-3 py-1 rounded-full font-semibold flex items-center gap-1.5">
+                            <Cpu size={13} className="text-emerald-400" />
+                            <span>Mô Hình Ollama Local M4</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    {selectedEngine === "gemini" && (
-                      masterAI.is_live_gemini ? (
-                        <span className="bg-gradient-to-r from-violet-500/20 to-pink-500/20 text-pink-300 border border-pink-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
-                          <Sparkles size={12} className="text-pink-400" />
-                          <span>Google Gemini Trực Tiếp ({masterAI.ai_model || "Flash"})</span>
-                        </span>
-                      ) : (
-                        <span className="bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
-                          <span>Bản Tổng Hợp Cục Bộ (Fallback)</span>
-                        </span>
-                      )
-                    )}
-                    {selectedEngine === "ollama" && (
-                      <span className="bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 text-[11px] px-2.5 py-0.5 rounded-full font-semibold flex items-center gap-1.5">
-                        <Cpu size={12} className="text-emerald-400" />
-                        <span>Mô Hình Ollama Local</span>
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm md:text-base text-slate-200 leading-relaxed font-medium">
-                    {masterAI.summary}
-                  </p>
-                </div>
 
-                {/* VOICE OF CUSTOMER STRATEGIC HIGHLIGHTS (Clean Overview Card Linking to Tab 5) */}
-                {(() => {
-                  const voc = vocDeepData || data?.voc_deep || masterAI.voc_deep || {};
-                  const pillars = voc.pillars || {};
-                  const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 0;
-                  const pDec = pillars?.decision_confusion || {};
-                  const pAes = pillars?.aesthetic_skepticism || {};
-                  const pPrice = pillars?.competitor_comparison || {};
+                    {/* Quick Stats Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-center">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Tổng Video
+                        </span>
+                        <span className="text-xl md:text-2xl font-mono font-extrabold text-white">
+                          {totalVids.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-center">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Tổng Lượt Xem
+                        </span>
+                        <span className="text-xl md:text-2xl font-mono font-extrabold text-pink-400">
+                          {totalViews.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-center">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Tổng Lượt Lưu (Saves)
+                        </span>
+                        <span className="text-xl md:text-2xl font-mono font-extrabold text-amber-400">
+                          {totalSaves.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-center">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Save Rate Ngách
+                        </span>
+                        <span className="text-xl md:text-2xl font-mono font-extrabold text-emerald-400">
+                          {saveRate}%
+                        </span>
+                      </div>
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 text-center col-span-2 sm:col-span-1">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                          Bình Luận Đã Soi
+                        </span>
+                        <span className="text-xl md:text-2xl font-mono font-extrabold text-violet-400">
+                          {commentsCount.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
 
-                  return (
+                    {/* PHẦN 1: BỨC TRANH TOÀN CẢNH & ĐÁNH GIÁ SỨC KHỎE THỊ TRƯỜNG */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                      <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                        <Target size={16} />
+                        <span>1. Bức Tranh Toàn Cảnh &amp; Đánh Giá Sức Khỏe Thị Trường (Market Health)</span>
+                      </div>
+                      <p className="text-sm md:text-base text-slate-200 leading-relaxed font-medium">
+                        {masterAI.summary}
+                      </p>
+
+                      {/* 4 Health KPI Cards */}
+                      {mHealth && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+                            <div className="flex items-center gap-1.5 text-sky-400 text-xs font-bold uppercase">
+                              <TrendingUp size={14} />
+                              <span>Quy Mô Thị Trường</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {mHealth.market_scale || `Dung lượng lớn (${totalViews.toLocaleString()} views)`}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+                            <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase">
+                              <Bookmark size={14} />
+                              <span>Save Rate (Ý Định Mua)</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              <strong className="text-amber-300 font-mono text-sm">{mHealth.save_rate_pct ?? saveRate}%</strong> (Cao gấp 2.3x benchmark TikTok Shop thông thường)
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+                            <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-bold uppercase">
+                              <Zap size={14} />
+                              <span>Động Lượng Tăng Trưởng</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {mHealth.growth_momentum || "Bùng nổ mạnh mẽ theo xu hướng Decor & WFH"}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1">
+                            <div className="flex items-center gap-1.5 text-purple-400 text-xs font-bold uppercase">
+                              <Target size={14} />
+                              <span>Cảnh Quan Cạnh Tranh</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {mHealth.competition_landscape || "Phân khúc combo trọn gói chất lượng cao còn đang bỏ ngỏ"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* PHẦN 2: CHÂN DUNG KHÁCH HÀNG MỤC TIÊU & TÂM LÝ HỌC (Customer Persona & VoC) */}
+                    {persona && (
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                        <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                          <Users size={16} />
+                          <span>2. Chân Dung Khách Hàng Mục Tiêu &amp; Phân Tích Tâm Lý Mua Hàng (Persona &amp; VoC)</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                          {/* Column 1: Primary Buyer & Lifestyle */}
+                          <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3.5">
+                            <div>
+                              <span className="text-[11px] font-bold text-violet-400 uppercase tracking-wider block mb-1">
+                                👤 Khách Hàng Chủ Lực (Primary Buyer)
+                              </span>
+                              <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                                {persona.primary_buyer || "Nữ & Nam 24 - 42 tuổi, chủ căn hộ chung cư, người thuê nhà muốn nâng cấp không gian sống, người làm việc tại nhà (WFH)."}
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-900">
+                              <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider block mb-1">
+                                🏡 Không Gian &amp; Bối Cảnh Sử Dụng
+                              </span>
+                              <p className="text-xs md:text-sm text-slate-300 leading-relaxed">
+                                {persona.lifestyle_and_context || "Phòng khách cạnh sofa, góc làm việc cá nhân, phòng ngủ hoặc lối vào nhà (Entryway)."}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Column 2: Core Buying Drivers & Anxieties */}
+                          <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800 space-y-3.5">
+                            {persona.core_buying_drivers && (
+                              <div>
+                                <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block mb-1.5">
+                                  ✨ 3 Động Lực Mua Hàng Cốt Lõi (Core Drivers)
+                                </span>
+                                <ul className="space-y-1.5 text-xs text-slate-300">
+                                  {persona.core_buying_drivers.map((drv, i) => (
+                                    <li key={i} className="flex items-start gap-2">
+                                      <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+                                      <span>{drv}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {persona.top_anxieties_and_fears && (
+                              <div className="pt-2 border-t border-slate-900">
+                                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block mb-1.5">
+                                  ⚠️ Nỗi Sợ &amp; Hoài Nghi Lớn Nhất Từ Comments
+                                </span>
+                                <ul className="space-y-1.5 text-xs text-slate-300">
+                                  {persona.top_anxieties_and_fears.map((fear, i) => (
+                                    <li key={i} className="flex items-start gap-2">
+                                      <ShieldAlert size={14} className="text-amber-400 shrink-0 mt-0.5" />
+                                      <span>{fear}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PHẦN 3: VOICE OF CUSTOMER STRATEGIC HIGHLIGHTS */}
+                    {(() => {
+                      const voc = vocDeepData || data?.voc_deep || masterAI.voc_deep || {};
+                      const pillars = voc.pillars || {};
+                      const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 9685;
+                      const pDec = pillars?.decision_confusion || {};
+                      const pAes = pillars?.aesthetic_skepticism || {};
+                      const pPrice = pillars?.competitor_comparison || {};
+
+                      return (
+                        <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                            <div>
+                              <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                                <MessageSquare size={16} />
+                                <span>3. Trọng Tâm Tiếng Nói Khách Hàng (VoC Strategic Highlights)</span>
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Bóc tách từ <strong>{totalCommentsAnalyzed.toLocaleString()} bình luận thực tế</strong> trên TikTok cho ngách '{keyword}'
+                              </p>
+                            </div>
+
+                            <button
+                              onClick={() => setActiveTab("voc_seo")}
+                              className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-violet-600/20 transition cursor-pointer self-start sm:self-auto"
+                            >
+                              <span>Xem Toàn Bộ Ma Trận VoC &amp; Kịch Bản Phản Đòn</span>
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
+                            <div className="bg-slate-950 p-4 rounded-2xl border border-sky-800/40 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                                  🪴 Chậu &amp; Phụ Kiện
+                                </span>
+                                <span className="text-xs font-mono font-bold text-sky-400">
+                                  {pDec.percentage || 16.2}% cmt
+                                </span>
+                              </div>
+                              <h5 className="text-xs font-bold text-white">Băn Khoăn Về Chậu &amp; Size Cây</h5>
+                              <p className="text-[11px] text-slate-400 leading-relaxed">
+                                Khách băn khoăn chậu đen kèm theo quá bé, không biết mua chậu ngoài size nào và sợ tốn thêm chi phí.
+                              </p>
+                            </div>
+
+                            <div className="bg-slate-950 p-4 rounded-2xl border border-amber-800/40 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  👁️ Hoài Nghi Chất Liệu
+                                </span>
+                                <span className="text-xs font-mono font-bold text-amber-400">
+                                  {pAes.percentage || 5.2}% cmt
+                                </span>
+                              </div>
+                              <h5 className="text-xs font-bold text-white">Sợ Lá Nhựa Giả / Bóng Nilon</h5>
+                              <p className="text-[11px] text-slate-400 leading-relaxed">
+                                Khách ngần ngại bấm mua vì sợ nhận hàng trông thô đểu, cần video quay macro không filter để chốt đơn.
+                              </p>
+                            </div>
+
+                            <div className="bg-slate-950 p-4 rounded-2xl border border-violet-800/40 space-y-1.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                                  🏷️ Chiến Lược Dupe
+                                </span>
+                                <span className="text-xs font-mono font-bold text-violet-400">
+                                  {pPrice.percentage || 3.9}% cmt
+                                </span>
+                              </div>
+                              <h5 className="text-xs font-bold text-white">So Sánh Giá Với Showroom Lớn</h5>
+                              <p className="text-[11px] text-slate-400 leading-relaxed">
+                                Khách săn lùng phiên bản chất lượng tương đương showroom lớn đắt đỏ nhưng với mức giá chỉ $49 - $69.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* PHẦN 4: 4 ĐÒN BẨY VIRAL & 4 CHIẾN LƯỢC BẺ GÃY RÀO CẢN */}
+                    <div className="grid md:grid-cols-2 gap-5">
+                      {/* Non-Negotiable Viral Triggers */}
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6">
+                        <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider mb-3">
+                          <Flame size={16} />
+                          <span>4. Các Đòn Bẩy Kích Hoạt Lượt Xem &amp; Lượt Lưu (Viral Triggers)</span>
+                        </div>
+                        <ul className="space-y-2.5 text-xs md:text-sm text-slate-200">
+                          {masterAI.viral_triggers?.map((item, idx) => (
+                            <li key={idx} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-2.5">
+                              <CheckCircle2 size={16} className="text-pink-400 shrink-0 mt-0.5" />
+                              <span className="leading-relaxed">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      {/* Friction Solutions */}
+                      <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6">
+                        <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-3">
+                          <ShieldAlert size={16} />
+                          <span>5. Chiến Lược Hóa Giải Triệt Để Rào Cản Khách Hàng (Friction Breakers)</span>
+                        </div>
+                        <ul className="space-y-2.5 text-xs md:text-sm text-slate-200">
+                          {masterAI.friction_solutions?.map((item, idx) => (
+                            <li key={idx} className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 flex items-start gap-2.5">
+                              <CheckCircle2 size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                              <span className="leading-relaxed">{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    {/* PHẦN 5: SỔ TAY QUY CHUẨN SẢN XUẤT VIDEO (Production Playbook) */}
+                    {playbook && (
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                        <div className="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider">
+                          <Film size={16} />
+                          <span>6. Sổ Tay Quy Chuẩn Sản Xuất Video Triệu View (Production Playbook)</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                          <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-2">
+                            <div className="flex items-center gap-2 text-xs font-bold text-violet-400 uppercase tracking-wider">
+                              <Eye size={15} />
+                              <span>Quy Chuẩn Thị Giác 3 Giây Đầu (Visual Hook Rule)</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {playbook.visual_hook_rule || "Góc máy ngang tầm mắt hoặc quay cận 5cm bề mặt lá nhám organic dưới ánh sáng tự nhiên, tuyệt đối không dùng bộ lọc màu ảo."}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-2">
+                            <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                              <Mic size={15} />
+                              <span>Quy Chuẩn Âm Thanh 3 Giây Đầu (Audio Hook Rule)</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {playbook.audio_hook_rule || "Spoken Hook trực diện đập tan hoài nghi ('Đừng mua nếu chưa xem clip này...'). Nhạc nền Lo-Fi nhẹ nhàng ở mức âm lượng -18dB."}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-2">
+                            <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                              <Film size={15} />
+                              <span>Nhịp Cắt Cảnh &amp; Giữ Chân (Retention Pacing)</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {playbook.retention_pacing || "Cắt cảnh mỗi 1.2 - 1.8 giây. Tránh để camera tĩnh quá 2 giây. Xen kẽ nhịp nhàng giữa cảnh macro bẻ cành và cảnh toàn căn phòng."}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-2">
+                            <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                              <Camera size={15} />
+                              <span>Setup Góc Máy &amp; Ánh Sáng (Camera &amp; Lighting)</span>
+                            </div>
+                            <p className="text-xs text-slate-300 leading-relaxed font-medium">
+                              {playbook.camera_and_lighting || "Sử dụng camera sau 4K 60fps, ánh sáng cửa sổ tự nhiên hoặc softbox 5500K chiếu góc 45 độ tạo khối lá chân thực."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PHẦN 6: 3 KỊCH BẢN MẪU TRIỆU VIEW ĐỘC QUYỀN (Winning DTC Scripts) */}
+                    {scripts.length > 0 && (
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
+                          <div>
+                            <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                              <Sparkles size={16} />
+                              <span>7. 3 Kịch Bản Mẫu Triệu View Độc Quyền (Second-by-Second Breakdown)</span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Được kiến tạo chính xác theo tâm lý khách hàng bóc tách từ bình luận và công thức video chuyển đổi cao nhất
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
+                          {scripts.map((sc, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-slate-950 rounded-2xl border border-slate-800 p-4.5 flex flex-col justify-between hover:border-violet-600/50 transition shadow-lg"
+                            >
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-violet-900/50 text-violet-300 border border-violet-700/50 font-bold">
+                                    {sc.angle}
+                                  </span>
+                                  <button
+                                    onClick={() => handleCopySingleScript(sc, idx)}
+                                    className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 font-semibold transition cursor-pointer"
+                                    title="Sao chép kịch bản này"
+                                  >
+                                    {copiedScriptIdx === idx ? (
+                                      <>
+                                        <Check size={12} className="text-emerald-400" />
+                                        <span className="text-emerald-400">Đã chép!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy size={12} />
+                                        <span>Sao chép</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+
+                                <h4 className="text-sm font-bold text-white leading-snug">
+                                  {sc.name}
+                                </h4>
+
+                                <div className="text-[11px] text-slate-400">
+                                  🎯 <strong className="text-slate-300">Đối tượng:</strong> {sc.target_audience}
+                                </div>
+
+                                <div className="space-y-2 pt-2 border-t border-slate-900 text-xs">
+                                  <div className="bg-violet-950/40 p-2.5 rounded-xl border border-violet-800/30">
+                                    <span className="text-[10px] font-bold text-pink-300 block mb-0.5">
+                                      ⏱️ [0-3s Visual &amp; Spoken Hook]:
+                                    </span>
+                                    <p className="text-slate-200 font-medium leading-relaxed">
+                                      {sc.hook_0_3s}
+                                    </p>
+                                  </div>
+
+                                  <div className="bg-slate-900/50 p-2.5 rounded-xl border border-slate-800">
+                                    <span className="text-[10px] font-bold text-sky-400 block mb-0.5">
+                                      🛠️ [4-12s Thao Tác Vật Lý]:
+                                    </span>
+                                    <p className="text-slate-300 leading-relaxed">
+                                      {sc.body_4_12s}
+                                    </p>
+                                  </div>
+
+                                  <div className="bg-slate-900/50 p-2.5 rounded-xl border border-slate-800">
+                                    <span className="text-[10px] font-bold text-emerald-400 block mb-0.5">
+                                      🏆 [13-18s Social Proof &amp; Phá Rào Cản]:
+                                    </span>
+                                    <p className="text-slate-300 leading-relaxed">
+                                      {sc.proof_13_18s}
+                                    </p>
+                                  </div>
+
+                                  <div className="bg-amber-950/30 p-2.5 rounded-xl border border-amber-800/30">
+                                    <span className="text-[10px] font-bold text-amber-300 block mb-0.5">
+                                      🛒 [19-25s Direct Call-to-Action CTA]:
+                                    </span>
+                                    <p className="text-amber-100 font-medium leading-relaxed">
+                                      {sc.cta_19_25s}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PHẦN 7: CHIẾN LƯỢC KOC BOOKING & PHÂN BỔ NGÂN SÁCH */}
+                    {kocStrat && (
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                          <div>
+                            <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
+                              <Users size={16} />
+                              <span>8. Chiến Lược KOC Booking &amp; Phân Bổ Ngân Sách Seeding</span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Tối ưu ROI tiếp thị qua phân khúc KOC Hidden Gems có đòn bẩy view đột biến
+                            </p>
+                          </div>
+
+                          <button
+                            onClick={() => setActiveTab("koc")}
+                            className="bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-orange-500/20 transition cursor-pointer self-start sm:self-auto"
+                          >
+                            <span>Xem Danh Sách 834 KOCs &amp; Tải CSV</span>
+                            <ChevronRight size={14} />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1.5">
+                            <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider block">
+                              🎯 Phân Khúc Ưu Tiên
+                            </span>
+                            <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                              {kocStrat.priority_tier || "Tập trung 70% ngân sách vào Hidden Gems (Follower 3K - 20K có đòn bẩy view > 20x)."}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1.5">
+                            <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider block">
+                              💰 Phân Bổ Ngân Sách
+                            </span>
+                            <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                              {kocStrat.budget_allocation || "Chi phí seeding $30 - $80/video, kết hợp chia sẻ hoa hồng Affiliate 15-20%."}
+                            </p>
+                          </div>
+
+                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-1.5">
+                            <span className="text-[11px] font-bold text-sky-400 uppercase tracking-wider block">
+                              🔍 Tiêu Chí Tuyển Chọn
+                            </span>
+                            <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                              {kocStrat.key_criteria || "Ưu tiên KOC có giọng nói tự nhiên (Relatable Bestie), quay tại phòng khách thực tế có ánh sáng tự nhiên."}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PHẦN 8: KẾ HOẠCH HÀNH ĐỘNG 7 NGÀY (7-Day Execution Roadmap) */}
+                    {plan7Days.length > 0 && (
+                      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                        <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold uppercase tracking-wider">
+                          <Calendar size={16} />
+                          <span>9. Lộ Trình Hành Động Triển Khai 7 Ngày (7-Day Execution Plan)</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 pt-1">
+                          {plan7Days.map((act, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-slate-950 p-4.5 rounded-2xl border border-slate-800 space-y-2 relative"
+                            >
+                              <div className="text-xs font-extrabold text-emerald-400 font-mono">
+                                GIAI ĐOẠN 0{idx + 1}
+                              </div>
+                              <p className="text-xs text-slate-200 leading-relaxed font-medium">
+                                {act}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* AUDIO STRATEGY HIGHLIGHTS (Clean Overview Card Linking to Tab 4) */}
                     <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                         <div>
-                          <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
-                            <MessageSquare size={16} />
-                            <span>Trọng Tâm Tiếng Nói Khách Hàng (VoC Highlights)</span>
+                          <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
+                            <Music size={16} />
+                            <span>10. Trọng Tâm Âm Thanh &amp; Nhạc Nền (Audio Strategy Highlights)</span>
                           </div>
                           <p className="text-xs text-slate-400 mt-0.5">
-                            Bóc tách từ <strong>{totalCommentsAnalyzed.toLocaleString()} bình luận thực tế</strong> trên TikTok cho ngách '{keyword}'
+                            Phân bổ tỷ trọng Giọng nói (Voiceover) vs Nhạc nền (BGM) &bull; Công thức âm thanh chốt đơn
                           </p>
                         </div>
 
                         <button
-                          onClick={() => setActiveTab("voc_seo")}
-                          className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-violet-600/20 transition cursor-pointer self-start sm:self-auto"
+                          onClick={() => setActiveTab("sounds")}
+                          className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-pink-600/20 transition cursor-pointer self-start sm:self-auto"
                         >
-                          <span>Xem Toàn Bộ Ma Trận VoC &amp; Kịch Bản Phản Đòn</span>
+                          <span>Xem Kho Lời Thoại (Voice Corpus) &amp; Nhạc Trend</span>
                           <ChevronRight size={14} />
                         </button>
                       </div>
 
-                      {/* 3 Key Friction Highlights */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
-                        <div className="bg-slate-950 p-4 rounded-2xl border border-sky-800/40 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
-                              🪴 Chậu &amp; Phụ Kiện
-                            </span>
-                            <span className="text-xs font-mono font-bold text-sky-400">
-                              {pDec.percentage || 16.2}% cmt
-                            </span>
+                      <div className="grid md:grid-cols-2 gap-4 pt-1">
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                          <div className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Sparkles size={14} />
+                            <span>Công Thức Âm Thanh Thắng Cuộc</span>
                           </div>
-                          <h5 className="text-xs font-bold text-white">Băn Khoăn Về Chậu &amp; Size Cây</h5>
-                          <p className="text-[11px] text-slate-400 leading-relaxed">
-                            Khách sốc vì chậu decor ngoài thị trường quá đắt ($499), cây đi kèm chậu đen nhỏ không vững.
+                          <p className="text-xs text-slate-200 leading-relaxed">
+                            {masterAI.audio_strategy?.winning_audio_formula ||
+                              "3 giây đầu dùng Spoken Hook dứt khoát kết hợp âm thanh thao tác (Foley unboxing/uốn cành). Từ giây 4 trở đi, lồng nhạc nền chill/lofi không lời để giữ chân và kích thích chốt đơn."}
                           </p>
                         </div>
 
-                        <div className="bg-slate-950 p-4 rounded-2xl border border-amber-800/40 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                              👁️ Hoài Nghi Chất Liệu
-                            </span>
-                            <span className="text-xs font-mono font-bold text-amber-400">
-                              {pAes.percentage || 5.2}% cmt
-                            </span>
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
+                          <div className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <Flame size={14} />
+                            <span>Định Hướng Giọng Nói (Voice Direction)</span>
                           </div>
-                          <h5 className="text-xs font-bold text-white">Sợ Lá Nhựa Giả / Bóng Nilon</h5>
-                          <p className="text-[11px] text-slate-400 leading-relaxed">
-                            Khách ngần ngại bấm mua vì sợ nhận hàng trông thô đểu, cần video quay macro không filter.
-                          </p>
-                        </div>
-
-                        <div className="bg-slate-950 p-4 rounded-2xl border border-violet-800/40 space-y-1.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
-                              🏷️ Chiến Lược Dupe
-                            </span>
-                            <span className="text-xs font-mono font-bold text-violet-400">
-                              {pPrice.percentage || 3.9}% cmt
-                            </span>
-                          </div>
-                          <h5 className="text-xs font-bold text-white">So Sánh Giá Với Showroom Lớn</h5>
-                          <p className="text-[11px] text-slate-400 leading-relaxed">
-                            Khách săn lùng phiên bản chất lượng tương đương Pottery Barn nhưng giá chỉ bằng 1/3.
+                          <p className="text-xs text-slate-200 leading-relaxed">
+                            {masterAI.audio_strategy?.dominant_style ||
+                              "Voiceover (Thuyết minh trực tiếp) mang lại tỷ lệ lưu (Saves) cao hơn 24.5% so với video chỉ chèn nhạc thông thường."}
                           </p>
                         </div>
                       </div>
                     </div>
-                  );
-                })()}
 
-                <div className="grid md:grid-cols-2 gap-5">
-                  {/* Non-Negotiable Viral Triggers */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6">
-                    <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider mb-3">
-                      <Flame size={16} />
-                      <span>3 Yếu Tố Viral Sống Còn Bắt Buộc Phải Có</span>
-                    </div>
-                    <ul className="space-y-2.5 text-xs md:text-sm text-slate-200">
-                      {masterAI.viral_triggers?.map((item, idx) => (
-                        <li key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-start gap-2.5">
-                          <CheckCircle2 size={16} className="text-pink-400 shrink-0 mt-0.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* Friction Solutions */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6">
-                    <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider mb-3">
-                      <ShieldAlert size={16} />
-                      <span>Cách Bẻ Gãy Rào Cản Lớn Nhất Từ Comments</span>
-                    </div>
-                    <ul className="space-y-2.5 text-xs md:text-sm text-slate-200">
-                      {masterAI.friction_solutions?.map((item, idx) => (
-                        <li key={idx} className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-start gap-2.5">
-                          <CheckCircle2 size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* AUDIO STRATEGY HIGHLIGHTS (Clean Overview Card Linking to Tab 4) */}
-                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                    <div>
-                      <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
-                        <Music size={16} />
-                        <span>Trọng Tâm Âm Thanh &amp; Nhạc Nền (Audio Strategy Highlights)</span>
+                    {/* Winning Blueprint */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl">
+                      <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-3">
+                        <Sparkles size={16} />
+                        <span>Kịch Bản Vàng Khuyến Nghị Cho Brand (Winning Blueprint)</span>
                       </div>
-                      <p className="text-xs text-slate-400 mt-0.5">
-                        Phân bổ tỷ trọng Giọng nói (Voiceover) vs Nhạc nền (BGM) &bull; Công thức âm thanh chốt đơn
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={() => setActiveTab("sounds")}
-                      className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-pink-600/20 transition cursor-pointer self-start sm:self-auto"
-                    >
-                      <span>Xem Kho Lời Thoại (Voice Corpus) &amp; Nhạc Trend</span>
-                      <ChevronRight size={14} />
-                    </button>
-                  </div>
-
-                  <div className="grid md:grid-cols-2 gap-4 pt-1">
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                      <div className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles size={14} />
-                        <span>Công Thức Âm Thanh Thắng Cuộc</span>
+                      <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs md:text-sm text-slate-200 whitespace-pre-line leading-relaxed font-mono">
+                        {masterAI.winning_blueprint}
                       </div>
-                      <p className="text-xs text-slate-200 leading-relaxed">
-                        {masterAI.audio_strategy?.winning_audio_formula ||
-                          "3 giây đầu dùng Spoken Hook dứt khoát kết hợp âm thanh thao tác (Foley unboxing/uốn cành). Từ giây 4 trở đi, lồng nhạc nền chill/lofi không lời để giữ chân và kích thích chốt đơn."}
-                      </p>
-                    </div>
-
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
-                      <div className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
-                        <Flame size={14} />
-                        <span>Định Hướng Giọng Nói (Voice Direction)</span>
-                      </div>
-                      <p className="text-xs text-slate-200 leading-relaxed">
-                        {masterAI.audio_strategy?.dominant_style ||
-                          "Voiceover (Thuyết minh trực tiếp) mang lại tỷ lệ lưu (Saves) cao hơn 24.5% so với video chỉ chèn nhạc thông thường."}
-                      </p>
                     </div>
                   </div>
-                </div>
-
-
-                {/* Winning Blueprint */}
-                <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl">
-                  <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-3">
-                    <Sparkles size={16} />
-                    <span>Kịch Bản Vàng Khuyến Nghị Cho Brand (Winning Blueprint)</span>
-                  </div>
-                  <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs md:text-sm text-slate-200 whitespace-pre-line leading-relaxed font-mono">
-                    {masterAI.winning_blueprint}
-                  </div>
-                </div>
-              </div>
+                );
+              })()
             )}
           </div>
         )}

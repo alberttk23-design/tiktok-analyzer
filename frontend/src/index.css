@@ -14,9 +14,29 @@
 
 
 body {
+  margin: 0;
+  min-width: 320px;
+}
 
-  margin:0;
-
-  min-width:320px;
-
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-area {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+  .print-clean-card {
+    background: #f8fafc !important;
+    border: 1px solid #cbd5e1 !important;
+    color: #0f172a !important;
+    box-shadow: none !important;
+  }
+  .print-clean-text {
+    color: #0f172a !important;
+  }
 }
