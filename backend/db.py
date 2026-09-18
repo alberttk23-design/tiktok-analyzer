@@ -1735,15 +1735,15 @@ def get_full_audio_intelligence(keyword: str) -> Dict[str, Any]:
     total_spoken = sum(d["count"] for d in audio_summary["distribution"] if d["sound_type"] in ("voiceover", "voice_with_music"))
     voice_pct = round((total_spoken / max(1, audio_summary["total_analyzed"])) * 100, 1)
 
-    # Query real top spoken hooks from database videos
+    # Query real top spoken hooks strictly from pure voiceover videos (voice không nhạc)
     cursor.execute("""
         SELECT v.creator, v.views, v.saves, v.caption, v.sound_title,
                COALESCE(ar.spoken_hook, '') as spoken_hook,
                COALESCE(ar.ad_angle, 'DTC Review') as ad_angle
         FROM videos v
         LEFT JOIN analysis_reviews ar ON v.video_id = ar.video_id
-        WHERE v.keyword = ? AND v.saves > 0
-        ORDER BY v.saves DESC, v.views DESC
+        WHERE v.keyword = ? AND v.sound_type = 'voiceover' AND v.saves > 0
+        ORDER BY CASE WHEN ar.spoken_hook != '' THEN 0 ELSE 1 END, v.saves DESC, v.views DESC
         LIMIT 5
     """, (keyword,))
     hook_rows = cursor.fetchall()
@@ -1753,8 +1753,7 @@ def get_full_audio_intelligence(keyword: str) -> Dict[str, Any]:
         for idx, r in enumerate(hook_rows):
             h_text = r["spoken_hook"].strip() if r["spoken_hook"] else ""
             if not h_text:
-                cap = (r["caption"] or "").strip()
-                h_text = cap[:100] + ("..." if len(cap) > 100 else "") if cap else f"Honest review of {keyword.title()}"
+                h_text = f"[Chưa bóc băng] Bấm '⚡ Bóc Băng' để AI Whisper phiên âm câu mở đầu của @{r['creator']}"
             top_spoken_hooks.append({
                 "rank": idx + 1,
                 "hook_text": h_text,
