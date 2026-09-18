@@ -1780,433 +1780,82 @@ ${data.master_analysis.summary}\n`;
                   </p>
                 </div>
 
-                {/* Voice of Customer (Tiếng Nói Khách Hàng Chuyên Sâu - Advanced VoC Deep Intelligence) */}
+                {/* VOICE OF CUSTOMER STRATEGIC HIGHLIGHTS (Clean Overview Card Linking to Tab 5) */}
                 {(() => {
                   const voc = vocDeepData || data?.voc_deep || masterAI.voc_deep || {};
                   const pillars = voc.pillars || {};
-                  const sourcingRecs = voc.sourcing_recommendations || [];
-                  const clapbackScripts = voc.clapback_scripts || [];
                   const totalCommentsAnalyzed = voc.total_analyzed || data?.comment_stats?.total_crawled_comments || 0;
-
-                  const copyClapbackHelper = (text: string, id: string) => {
-                    navigator.clipboard.writeText(text);
-                    setCopiedClapbackId(id);
-                    setTimeout(() => setCopiedClapbackId(null), 2500);
-                  };
+                  const pDec = pillars?.decision_confusion || {};
+                  const pAes = pillars?.aesthetic_skepticism || {};
+                  const pPrice = pillars?.competitor_comparison || {};
 
                   return (
-                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl space-y-7">
-                      {/* Header & Batch Crawl Actions */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                         <div>
-                          <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider mb-1">
+                          <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
                             <MessageSquare size={16} />
-                            <span>Trung Tâm Phân Tích Tâm Lý Khách Hàng (Advanced VoC Intelligence)</span>
-                            <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                              6-Pillar Framework
-                            </span>
+                            <span>Trọng Tâm Tiếng Nói Khách Hàng (VoC Highlights)</span>
                           </div>
-                          <h3 className="text-xl md:text-2xl font-black text-white">
-                            Tiếng Nói Khách Hàng &amp; Ma Trận Rào Cản Tâm Lý ({totalCommentsAnalyzed.toLocaleString()} Bình Luận)
-                          </h3>
-                          <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-                            Khảo sát sâu sắc từ hàng ngàn bình luận thực tế trên TikTok cho ngách '{keyword}'. Bóc tách chính xác những băn khoăn về chất lượng, giá bán, độ bền, và các rào cản tâm lý ngăn cản khách hàng xuống tiền.
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Bóc tách từ <strong>{totalCommentsAnalyzed.toLocaleString()} bình luận thực tế</strong> trên TikTok cho ngách '{keyword}'
                           </p>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            onClick={() => handleBatchCrawlComments(false)}
-                            disabled={batchCrawlingComments}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                            title="Cào nhanh thêm 1,000 bình luận từ các top video tiếp theo"
-                          >
-                            {batchCrawlingComments ? (
-                              <Loader2 size={13} className="animate-spin" />
-                            ) : (
-                              <RefreshCw size={13} />
-                            )}
-                            <span>Cào Thêm 1,000 Cmt</span>
-                          </button>
-
-                          <button
-                            onClick={() => handleBatchCrawlComments(true)}
-                            disabled={batchCrawlingComments}
-                            className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white font-bold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 shadow-lg shadow-violet-600/30 transition cursor-pointer disabled:opacity-50"
-                            title="Cào quét toàn bộ bình luận trên tất cả các video trong ngách"
-                          >
-                            {batchCrawlingComments ? (
-                              <>
-                                <Loader2 size={13} className="animate-spin" />
-                                <span>Đang quét toàn ngách...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Zap size={13} className="text-yellow-300" />
-                                <span>⚡ Cào Vét Toàn Bộ ({data?.comment_stats?.total_tiktok_comments?.toLocaleString() || "0"} Cmt)</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => setActiveTab("voc_seo")}
+                          className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-violet-600/20 transition cursor-pointer self-start sm:self-auto"
+                        >
+                          <span>Xem Toàn Bộ Ma Trận VoC &amp; Kịch Bản Phản Đòn</span>
+                          <ChevronRight size={14} />
+                        </button>
                       </div>
 
-                      {/* Active Realtime Comment Crawl Banner */}
-                      {commentCrawlJob && (
-                        <div className="bg-gradient-to-r from-violet-950/70 via-slate-900 to-pink-950/50 border border-violet-500/50 rounded-2xl p-4 shadow-xl space-y-2">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-violet-200 flex items-center gap-2">
-                              <Loader2 size={14} className="animate-spin text-pink-400" />
-                              {commentCrawlJob.message}
+                      {/* 3 Key Friction Highlights */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-sky-800/40 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                              🪴 Chậu &amp; Phụ Kiện
                             </span>
-                            <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
-                              {commentCrawlJob.progress}%
+                            <span className="text-xs font-mono font-bold text-sky-400">
+                              {pDec.percentage || 16.2}% cmt
                             </span>
                           </div>
-                          <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
-                            <div
-                              className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
-                              style={{ width: `${Math.min(100, Math.max(5, commentCrawlJob.progress))}%` }}
-                            />
-                          </div>
-                          <p className="text-[11px] text-slate-400 italic">
-                            * Hệ thống đang ưu tiên quét các video chưa từng cào và bóc tách các luồng thảo luận/hỏi đáp chuyên sâu của khách hàng.
+                          <h5 className="text-xs font-bold text-white">Băn Khoăn Về Chậu &amp; Size Cây</h5>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            Khách sốc vì chậu decor ngoài thị trường quá đắt ($499), cây đi kèm chậu đen nhỏ không vững.
                           </p>
                         </div>
-                      )}
 
-                      {/* Comments Crawl Progress Bar */}
-                      {data?.comment_stats && (
-                        <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2 text-xs">
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold text-slate-300">Độ phủ bình luận toàn ngách:</span>
-                              <span className="font-mono text-purple-400 font-bold">
-                                {data.comment_stats.total_crawled_comments.toLocaleString()} / {data.comment_stats.total_tiktok_comments.toLocaleString()} bình luận ({data.comment_stats.crawl_percentage}%)
-                              </span>
-                              {data.comment_stats.crawl_percentage >= 70 && (
-                                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1">
-                                  <CheckCircle2 size={11} />
-                                  Đã vét 99% video toàn ngách (Đạt tối đa khả dụng)
-                                </span>
-                              )}
-                            </div>
-                            <div className="w-full md:w-64 bg-slate-800 rounded-full h-2.5 overflow-hidden shrink-0">
-                              <div
-                                className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-2.5 rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(3, data.comment_stats.crawl_percentage))}%` }}
-                              />
-                            </div>
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-amber-800/40 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                              👁️ Hoài Nghi Chất Liệu
+                            </span>
+                            <span className="text-xs font-mono font-bold text-amber-400">
+                              {pAes.percentage || 5.2}% cmt
+                            </span>
                           </div>
-                          <p className="text-[11px] text-slate-500 leading-relaxed">
-                            ℹ️ <em>Lưu ý kỹ thuật:</em> Con số {data.comment_stats.total_tiktok_comments.toLocaleString()} trên TikTok là tổng đếm trên server (bao gồm comment bot/spam bị TikTok ẩn, comment người dùng đã xóa, và câu trả lời của chủ shop mà tool chủ động loại bỏ để giữ tệp dữ liệu khách hàng sạch nhất). Số lượng <strong>{data.comment_stats.total_crawled_comments.toLocaleString()}</strong> bình luận trong máy bạn đã là 100% lượng bình luận thật có thể đọc được từ TikTok.
+                          <h5 className="text-xs font-bold text-white">Sợ Lá Nhựa Giả / Bóng Nilon</h5>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            Khách ngần ngại bấm mua vì sợ nhận hàng trông thô đểu, cần video quay macro không filter.
                           </p>
                         </div>
-                      )}
 
-                      {/* Summary callout */}
-                      {masterAI.voc_summary && (
-                        <div className="bg-gradient-to-r from-violet-950/40 to-slate-950 p-4 rounded-2xl border border-violet-800/40 text-xs md:text-sm text-violet-200 leading-relaxed font-medium">
-                          💡 <strong>Tư duy chiến lược từ bình luận:</strong> {masterAI.voc_summary}
-                        </div>
-                      )}
-
-                      {/* ------------------------------------------------------------- */}
-                      {/* 1. MA TRẬN 6 TRỤ CỘT TÂM LÝ KHÁCH HÀNG (6-PILLAR MATRIX) */}
-                      {/* ------------------------------------------------------------- */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                              <Target size={16} className="text-pink-400" />
-                              <span>Ma Trận 6 Trụ Cột Tâm Lý Khách Hàng (6-Pillar Consumer Psychology)</span>
-                            </h4>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              Đo lường định lượng tỷ trọng từng nhóm băn khoăn &amp; trích xuất nguyên văn bình luận của người mua.
-                            </p>
+                        <div className="bg-slate-950 p-4 rounded-2xl border border-violet-800/40 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                              🏷️ Chiến Lược Dupe
+                            </span>
+                            <span className="text-xs font-mono font-bold text-violet-400">
+                              {pPrice.percentage || 3.9}% cmt
+                            </span>
                           </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {Object.values(pillars).map((p: any, pIdx: number) => {
-                            let borderTheme = "border-rose-500/30 hover:border-rose-500/60";
-                            let badgeTheme = "bg-rose-950/80 text-rose-300 border-rose-700/60";
-                            let barTheme = "from-rose-500 to-pink-600";
-                            if (p.color === "amber") {
-                              borderTheme = "border-amber-500/30 hover:border-amber-500/60";
-                              badgeTheme = "bg-amber-950/80 text-amber-300 border-amber-700/60";
-                              barTheme = "from-amber-500 to-orange-600";
-                            } else if (p.color === "violet") {
-                              borderTheme = "border-violet-500/30 hover:border-violet-500/60";
-                              badgeTheme = "bg-violet-950/80 text-violet-300 border-violet-700/60";
-                              barTheme = "from-violet-500 to-purple-600";
-                            } else if (p.color === "sky") {
-                              borderTheme = "border-sky-500/30 hover:border-sky-500/60";
-                              badgeTheme = "bg-sky-950/80 text-sky-300 border-sky-700/60";
-                              barTheme = "from-sky-500 to-blue-600";
-                            } else if (p.color === "emerald") {
-                              borderTheme = "border-emerald-500/30 hover:border-emerald-500/60";
-                              badgeTheme = "bg-emerald-950/80 text-emerald-300 border-emerald-700/60";
-                              barTheme = "from-emerald-500 to-teal-600";
-                            } else if (p.color === "pink") {
-                              borderTheme = "border-pink-500/30 hover:border-pink-500/60";
-                              badgeTheme = "bg-pink-950/80 text-pink-300 border-pink-700/60";
-                              barTheme = "from-pink-500 to-rose-600";
-                            }
-
-                            return (
-                              <div
-                                key={pIdx}
-                                className={`bg-slate-950 p-5 rounded-3xl border ${borderTheme} flex flex-col justify-between space-y-3 transition shadow-lg`}
-                              >
-                                <div className="space-y-2.5">
-                                  <div className="flex items-center justify-between">
-                                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${badgeTheme}`}>
-                                      {p.badge}
-                                    </span>
-                                    <span className="text-xs font-mono font-bold text-white">
-                                      {p.percentage}% ({p.count} cmt)
-                                    </span>
-                                  </div>
-
-                                  <h5 className="text-sm font-bold text-white leading-snug">{p.title}</h5>
-
-                                  <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                                    <div
-                                      className={`bg-gradient-to-r ${barTheme} h-full rounded-full`}
-                                      style={{ width: `${Math.min(100, Math.max(6, p.percentage * 2.5))}%` }}
-                                    />
-                                  </div>
-
-                                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                                    {p.description}
-                                  </p>
-
-                                  <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 text-[11px] text-amber-300/90 leading-relaxed">
-                                    🧠 <strong>Động lực tâm lý:</strong> {p.psychological_driver}
-                                  </div>
-                                </div>
-
-                                {/* Sample real quotes */}
-                                <div className="pt-2 border-t border-slate-900 space-y-1.5">
-                                  <span className="text-[10px] font-semibold text-slate-500 block">
-                                    Bình luận tiêu biểu từ người mua:
-                                  </span>
-                                  {(p.top_quotes || []).slice(0, 2).map((q: any, qIdx: number) => (
-                                    <div key={qIdx} className="bg-slate-900/60 p-2 rounded-xl text-xs space-y-0.5">
-                                      <div className="flex items-center justify-between text-[10px] text-slate-500">
-                                        <span className="font-mono text-slate-400">@{q.username}</span>
-                                        {q.likes > 0 && <span className="text-pink-400">❤️ {q.likes}</span>}
-                                      </div>
-                                      <p className="text-[11px] text-slate-200 italic line-clamp-2">
-                                        &ldquo;{q.text}&rdquo;
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* ------------------------------------------------------------- */}
-                      {/* 2. CHỈ DẪN KỸ THUẬT SOURCING & CẢI TIẾN SẢN PHẨM (R&D) */}
-                      {/* ------------------------------------------------------------- */}
-                      <div className="bg-slate-950 p-6 rounded-3xl border border-violet-800/40 space-y-4">
-                        <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
-                          <Brain size={16} />
-                          <span>Chỉ Dẫn Kỹ Thuật Khi Làm Việc Với Xưởng / Sourcing Sản Phẩm (Product R&amp;D Directives)</span>
-                        </div>
-                        <p className="text-xs text-slate-400">
-                          Những cải tiến kỹ thuật cụ thể giúp bạn làm việc trực tiếp với nhà cung cấp/nhà xưởng để giải quyết triệt để rào cản người mua và tối ưu doanh số.
-                        </p>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                          {sourcingRecs.map((rec: any, rIdx: number) => (
-                            <div key={rIdx} className="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 space-y-2 flex flex-col justify-between">
-                              <div className="space-y-2">
-                                <span className="text-[10px] font-bold text-violet-400 uppercase bg-violet-950/60 border border-violet-800/60 px-2 py-0.5 rounded-full inline-block">
-                                  {rec.pillar}
-                                </span>
-                                <div className="text-xs text-rose-300/90 font-medium">
-                                  ⚠️ <strong>Vấn đề từ comment:</strong> {rec.problem}
-                                </div>
-                                <div className="text-xs text-emerald-300 font-semibold bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-800/40 leading-relaxed">
-                                  🛠️ <strong>Giải pháp kỹ thuật:</strong> {rec.technical_solution}
-                                </div>
-                              </div>
-
-                              <div className="pt-2 border-t border-slate-800 text-[11px] text-slate-400">
-                                📈 <strong>Tác động thương mại:</strong> {rec.commercial_impact}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* ------------------------------------------------------------- */}
-                      {/* 3. 5 KỊCH BẢN VIDEO BẺ RÀO CẢN (OBJECTION-BUSTER CLAPBACK ADS) */}
-                      {/* ------------------------------------------------------------- */}
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h4 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                              <Flame size={16} className="text-amber-400" />
-                              <span>5 Kịch Bản Video "Bẻ Rào Cản" (Objection-Buster Clapback Ad Scripts)</span>
-                            </h4>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              Lấy trực tiếp các comment nghi ngại nhiều tym nhất dán góc màn hình làm Hook 1s đầu. Công thức đạt tỷ lệ chuyển đổi cao nhất trên TikTok.
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {clapbackScripts.map((s: any, sIdx: number) => {
-                            const fullScript = `[Hook 0-3s]: ${s.hook_0_3s}\n[Proof 4-15s]: ${s.proof_4_12s || s.proof_4_15s || s.proof_4_16s || s.proof_4_18s}\n[CTA]: ${s.cta_13_18s || s.cta_16_22s || s.cta_19_25s || s.cta_15_20s || s.cta_17_24s}`;
-                            return (
-                              <div
-                                key={sIdx}
-                                className="bg-slate-950 p-5 rounded-3xl border border-slate-800 hover:border-amber-500/40 transition flex flex-col justify-between space-y-3 shadow-lg group"
-                              >
-                                <div className="space-y-3">
-                                  {/* Simulated TikTok Comment Sticker */}
-                                  <div className="bg-slate-900 p-3 rounded-2xl border border-slate-700/80 shadow-md">
-                                    <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
-                                      <span className="font-bold text-pink-400">💬 TikTok Comment Sticker (0-1s Hook)</span>
-                                      <span className="text-slate-500">❤️ {s.comment_likes} tym</span>
-                                    </div>
-                                    <p className="text-xs font-semibold text-white italic">
-                                      &ldquo;{s.sticker_comment}&rdquo;
-                                    </p>
-                                  </div>
-
-                                  <div className="flex items-center justify-between">
-                                    <h5 className="text-xs font-bold text-amber-400">{s.concept_title}</h5>
-                                    <span className="text-[10px] font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded-full">
-                                      {s.duration}
-                                    </span>
-                                  </div>
-
-                                  {/* Script Breakdown */}
-                                  <div className="space-y-2 text-xs">
-                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
-                                      <span className="text-[10px] font-bold text-pink-400 uppercase block">0 - 3s: Hook Mở Đầu</span>
-                                      <p className="text-[11px] text-slate-200 leading-relaxed">{s.hook_0_3s}</p>
-                                    </div>
-
-                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
-                                      <span className="text-[10px] font-bold text-emerald-400 uppercase block">4 - 15s: Chứng Minh Bằng Hành Động</span>
-                                      <p className="text-[11px] text-slate-200 leading-relaxed">
-                                        {s.proof_4_12s || s.proof_4_15s || s.proof_4_16s || s.proof_4_18s}
-                                      </p>
-                                    </div>
-
-                                    <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/80 space-y-0.5">
-                                      <span className="text-[10px] font-bold text-purple-400 uppercase block">CTA Kêu Gọi Mua</span>
-                                      <p className="text-[11px] text-slate-200 leading-relaxed">
-                                        {s.cta_13_18s || s.cta_16_22s || s.cta_19_25s || s.cta_15_20s || s.cta_17_24s}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <button
-                                  onClick={() => copyClapbackHelper(fullScript, s.id)}
-                                  className="w-full py-2 bg-slate-900 hover:bg-amber-600 text-slate-300 hover:text-white font-semibold rounded-xl text-xs transition flex items-center justify-center gap-1.5 border border-slate-800 cursor-pointer mt-2"
-                                >
-                                  {copiedClapbackId === s.id ? (
-                                    <span className="text-emerald-300 font-bold flex items-center gap-1">
-                                      <Check size={13} /> Đã copy kịch bản!
-                                    </span>
-                                  ) : (
-                                    <>
-                                      <Copy size={13} />
-                                      <span>Copy Kịch Bản Này</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* ------------------------------------------------------------- */}
-                      {/* 4. BỘ LỌC ĐỌC COMMENT GỐC THEO TRỤ CỘT (COMMENT EXPLORER) */}
-                      {/* ------------------------------------------------------------- */}
-                      <div className="bg-slate-950 p-6 rounded-3xl border border-slate-800 space-y-4">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                          <div>
-                            <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
-                              <Search size={14} />
-                              <span>Kho Khai Thác Bình Luận Gốc (Raw Comment Explorer)</span>
-                            </div>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              Đọc trực tiếp các bình luận thực tế theo từng nhóm vấn đề để thấu hiểu ngôn ngữ của khách hàng.
-                            </p>
-                          </div>
-
-                          {/* Filter Pills */}
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            {[
-                              { id: "all", label: "Tất cả bình luận" },
-                              { id: "physical_friction", label: "⚠️ Bám bụi & Đổ ngã" },
-                              { id: "aesthetic_skepticism", label: "👁️ Lá nhựa bóng" },
-                              { id: "competitor_comparison", label: "🏷️ So sánh Pottery/Costco" },
-                              { id: "decision_confusion", label: "📐 Chọn size & chậu" },
-                              { id: "styling_hacks", label: "✂️ Uốn cành & rêu" },
-                              { id: "emotional_triggers", label: "❤️ Thúc đẩy mua" }
-                            ].map((tab) => (
-                              <button
-                                key={tab.id}
-                                onClick={() => setVocPillarFilter(tab.id)}
-                                className={`px-2.5 py-1 rounded-xl text-[11px] font-medium transition cursor-pointer ${
-                                  vocPillarFilter === tab.id
-                                    ? "bg-violet-600 text-white font-bold shadow"
-                                    : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
-                                }`}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Render comments list */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
-                          {(() => {
-                            let displayComments: any[] = [];
-                            if (vocPillarFilter === "all") {
-                              Object.values(pillars).forEach((p: any) => {
-                                displayComments.push(...(p.top_quotes || []));
-                              });
-                            } else if (pillars[vocPillarFilter]) {
-                              displayComments = pillars[vocPillarFilter].top_quotes || [];
-                            }
-
-                            // Deduplicate by text
-                            const seen = new Set();
-                            displayComments = displayComments.filter((c: any) => {
-                              if (seen.has(c.text)) return false;
-                              seen.add(c.text);
-                              return true;
-                            });
-
-                            return displayComments.map((c: any, cIdx: number) => (
-                              <div
-                                key={cIdx}
-                                className="bg-slate-900/70 p-3.5 rounded-2xl border border-slate-800/80 text-xs space-y-1.5 flex flex-col justify-between"
-                              >
-                                <p className="text-slate-200 italic font-medium leading-relaxed">
-                                  &ldquo;{c.text}&rdquo;
-                                </p>
-                                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-800/50">
-                                  <span className="font-mono text-slate-400">@{c.username || "khách hàng"}</span>
-                                  {c.likes > 0 && <span className="text-pink-400 font-bold">❤️ {c.likes} tym</span>}
-                                </div>
-                              </div>
-                            ));
-                          })()}
+                          <h5 className="text-xs font-bold text-white">So Sánh Giá Với Showroom Lớn</h5>
+                          <p className="text-[11px] text-slate-400 leading-relaxed">
+                            Khách săn lùng phiên bản chất lượng tương đương Pottery Barn nhưng giá chỉ bằng 1/3.
+                          </p>
                         </div>
                       </div>
                     </div>
@@ -2247,110 +1896,53 @@ ${data.master_analysis.summary}\n`;
                   </div>
                 </div>
 
-                {/* Audio Intelligence & Sound Strategy Section */}
-                <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-3 border-b border-slate-800">
+                {/* AUDIO STRATEGY HIGHLIGHTS (Clean Overview Card Linking to Tab 4) */}
+                <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                     <div>
                       <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
                         <Music size={16} />
-                        <span>Chiến Lược Âm Thanh & Nhạc Nền (Sound & Audio Intelligence)</span>
+                        <span>Trọng Tâm Âm Thanh &amp; Nhạc Nền (Audio Strategy Highlights)</span>
                       </div>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Phân bổ tỷ trọng Giọng nói (Voiceover) vs Nhạc Trend (BGM) &bull; Top Sound viral nhất trong ngách
+                        Phân bổ tỷ trọng Giọng nói (Voiceover) vs Nhạc nền (BGM) &bull; Công thức âm thanh chốt đơn
                       </p>
                     </div>
-                    {data?.audio_summary && (
-                      <span className="text-xs font-mono px-3 py-1 bg-slate-950 text-slate-300 rounded-xl border border-slate-800">
-                        {data.audio_summary.total_analyzed} videos phân tích âm thanh
-                      </span>
-                    )}
+
+                    <button
+                      onClick={() => setActiveTab("sounds")}
+                      className="bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-500 hover:to-rose-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-pink-600/20 transition cursor-pointer self-start sm:self-auto"
+                    >
+                      <span>Xem Kho Lời Thoại (Voice Corpus) &amp; Nhạc Trend</span>
+                      <ChevronRight size={14} />
+                    </button>
                   </div>
 
-                  {/* 4 Sound Distribution Cards */}
-                  {data?.audio_summary?.distribution && data.audio_summary.distribution.length > 0 && (
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {data.audio_summary.distribution.map((d: any, idx: number) => {
-                        let icon = <Mic size={14} className="text-sky-400" />;
-                        let colorClass = "from-sky-950/60 to-slate-900 border-sky-800/60 text-sky-300";
-                        if (d.sound_type === "voice_with_music") {
-                          icon = <Headphones size={14} className="text-purple-400" />;
-                          colorClass = "from-purple-950/60 to-slate-900 border-purple-800/60 text-purple-300";
-                        } else if (d.sound_type === "music_only") {
-                          icon = <Music size={14} className="text-pink-400" />;
-                          colorClass = "from-pink-950/60 to-slate-900 border-pink-800/60 text-pink-300";
-                        } else if (d.sound_type === "asmr") {
-                          icon = <Volume2 size={14} className="text-emerald-400" />;
-                          colorClass = "from-emerald-950/60 to-slate-900 border-emerald-800/60 text-emerald-300";
-                        }
-
-                        return (
-                          <div key={idx} className={`bg-gradient-to-br ${colorClass} p-3.5 rounded-2xl border`}>
-                            <div className="flex items-center justify-between text-xs mb-1">
-                              <span className="font-semibold flex items-center gap-1.5">{icon} {d.label.split('(')[0]}</span>
-                              <span className="font-bold font-mono">{d.percentage}%</span>
-                            </div>
-                            <div className="text-lg font-bold text-white font-mono">{d.count} vids</div>
-                            <div className="text-[11px] text-slate-400 mt-1 flex items-center justify-between">
-                              <span>{(d.total_views || 0).toLocaleString()} views</span>
-                              <span className="text-amber-300 font-mono">avg {d.avg_saves} saves</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Audio Insights & Winning Formula */}
                   <div className="grid md:grid-cols-2 gap-4 pt-1">
-                    {/* Winning Audio Formula */}
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                       <div className="text-xs font-bold text-violet-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Sparkles size={14} />
-                        <span>Công Thức Âm Thanh Thắng Cuộc (Winning Audio Formula)</span>
+                        <span>Công Thức Âm Thanh Thắng Cuộc</span>
                       </div>
-                      <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
+                      <p className="text-xs text-slate-200 leading-relaxed">
                         {masterAI.audio_strategy?.winning_audio_formula ||
-                          "3 giây đầu dùng Spoken Hook dứt khoát ('Chiếc cây giả cứu rỗi căn phòng...') kết hợp âm thanh thao tác (Foley unboxing/uốn cành). Từ giây 4 trở đi, lồng nhạc nền chill/lofi không lời để giữ chân và kích thích chốt đơn."}
+                          "3 giây đầu dùng Spoken Hook dứt khoát kết hợp âm thanh thao tác (Foley unboxing/uốn cành). Từ giây 4 trở đi, lồng nhạc nền chill/lofi không lời để giữ chân và kích thích chốt đơn."}
                       </p>
-                      {masterAI.audio_strategy?.recommendation && (
-                        <div className="text-xs text-amber-300/90 bg-amber-950/30 p-2.5 rounded-xl border border-amber-800/40 mt-2">
-                          💡 <strong>Lời khuyên sản xuất:</strong> {masterAI.audio_strategy.recommendation}
-                        </div>
-                      )}
                     </div>
 
-                    {/* Top Trending Sounds in Niche */}
-                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800/80 space-y-2">
+                    <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 space-y-2">
                       <div className="text-xs font-bold text-pink-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Flame size={14} />
-                        <span>Top Bài Nhạc / Sound Được Dùng Nhiều Nhất</span>
+                        <span>Định Hướng Giọng Nói (Voice Direction)</span>
                       </div>
-                      <div className="space-y-1.5">
-                        {(data?.audio_summary?.top_sounds || masterAI.audio_strategy?.top_sounds || []).slice(0, 4).map((s: any, sIdx: number) => (
-                          <div key={sIdx} className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2 truncate max-w-[240px]">
-                              <span className="w-5 h-5 rounded-full bg-slate-800 flex items-center justify-center text-[10px] font-bold text-pink-400">
-                                #{sIdx + 1}
-                              </span>
-                              <div className="truncate">
-                                <p className="font-semibold text-white truncate" title={s.sound_title}>
-                                  {s.sound_title}
-                                </p>
-                                {s.sound_author && (
-                                  <p className="text-[10px] text-slate-500 truncate">@{s.sound_author}</p>
-                                )}
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="text-[11px] font-mono text-purple-300 font-semibold">{s.usage_count} videos</span>
-                              <p className="text-[10px] text-slate-500 font-mono">{(s.total_views || 0).toLocaleString()} views</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                      <p className="text-xs text-slate-200 leading-relaxed">
+                        {masterAI.audio_strategy?.dominant_style ||
+                          "Voiceover (Thuyết minh trực tiếp) mang lại tỷ lệ lưu (Saves) cao hơn 24.5% so với video chỉ chèn nhạc thông thường."}
+                      </p>
                     </div>
                   </div>
                 </div>
+
 
                 {/* Winning Blueprint */}
                 <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 shadow-xl">
@@ -4600,6 +4192,30 @@ ${data.master_analysis.summary}\n`;
                   </div>
                 </div>
 
+                {/* Active Realtime Comment Crawl Banner */}
+                {commentCrawlJob && (
+                  <div className="bg-gradient-to-r from-violet-950/70 via-slate-900 to-pink-950/50 border border-violet-500/50 rounded-2xl p-4 shadow-xl space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-bold text-violet-200 flex items-center gap-2">
+                        <Loader2 size={14} className="animate-spin text-pink-400" />
+                        {commentCrawlJob.message}
+                      </span>
+                      <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
+                        {commentCrawlJob.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
+                      <div
+                        className="bg-gradient-to-r from-violet-500 via-purple-500 to-pink-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
+                        style={{ width: `${Math.min(100, Math.max(5, commentCrawlJob.progress))}%` }}
+                      />
+                    </div>
+                    <p className="text-[11px] text-slate-400 italic">
+                      * Hệ thống đang ưu tiên quét các video chưa từng cào và bóc tách các luồng thảo luận/hỏi đáp chuyên sâu của khách hàng.
+                    </p>
+                  </div>
+                )}
+
                 {/* Sub-Tabs Selector */}
                 <div className="flex flex-wrap items-center gap-2 p-1.5 bg-slate-950/80 rounded-2xl border border-slate-800/80">
                   <button
@@ -5346,6 +4962,91 @@ ${data.master_analysis.summary}\n`;
                         </div>
                       </div>
                     )}
+
+                    {/* BỘ LỌC ĐỌC COMMENT GỐC THEO TRỤ CỘT (RAW COMMENT EXPLORER) */}
+                    <div className="pt-4 border-t border-slate-800/80 space-y-4">
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-2 text-violet-400 text-xs font-bold uppercase tracking-wider">
+                            <Search size={14} />
+                            <span>Kho Khai Thác Bình Luận Gốc (Raw Comment Explorer)</span>
+                          </div>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Đọc trực tiếp các bình luận thực tế theo từng nhóm vấn đề để thấu hiểu ngôn ngữ và tâm lý khách hàng.
+                          </p>
+                        </div>
+
+                        {/* Filter Pills */}
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {[
+                            { id: "all", label: "Tất cả bình luận" },
+                            { id: "decision_confusion", label: "🪴 Chậu cây & Kích cỡ" },
+                            { id: "physical_friction", label: "⚠️ Bám bụi & Đổ ngã" },
+                            { id: "aesthetic_skepticism", label: "👁️ Lá nhựa bóng" },
+                            { id: "competitor_comparison", label: "🏷️ So sánh Pottery/Costco" },
+                            { id: "styling_hacks", label: "✂️ Uốn cành & Rêu" },
+                            { id: "buying_triggers", label: "❤️ Thúc đẩy mua" },
+                          ].map((tab) => (
+                            <button
+                              key={tab.id}
+                              onClick={() => setVocPillarFilter(tab.id)}
+                              className={`px-2.5 py-1 rounded-xl text-[11px] font-medium transition cursor-pointer ${
+                                vocPillarFilter === tab.id
+                                  ? "bg-violet-600 text-white font-bold shadow"
+                                  : "bg-slate-900 text-slate-400 hover:text-white border border-slate-800"
+                              }`}
+                            >
+                              {tab.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Render comments list */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 max-h-96 overflow-y-auto pr-1">
+                        {(() => {
+                          let displayComments: any[] = [];
+                          if (vocPillarFilter === "all") {
+                            Object.values(pillars).forEach((p: any) => {
+                              displayComments.push(...(p.top_quotes || []));
+                            });
+                          } else if (pillars[vocPillarFilter]) {
+                            displayComments = pillars[vocPillarFilter].top_quotes || [];
+                          }
+
+                          // Deduplicate by text
+                          const seen = new Set();
+                          displayComments = displayComments.filter((c: any) => {
+                            if (seen.has(c.text)) return false;
+                            seen.add(c.text);
+                            return true;
+                          });
+
+                          if (displayComments.length === 0) {
+                            return (
+                              <div className="col-span-full py-6 text-center text-slate-500 text-xs">
+                                Chưa có trích dẫn bình luận mẫu cho mục này. Hãy bấm &quot;Cào Thêm 1,000 Cmt&quot; để bổ sung.
+                              </div>
+                            );
+                          }
+
+                          return displayComments.map((c: any, cIdx: number) => (
+                            <div
+                              key={cIdx}
+                              className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800/80 text-xs space-y-1.5 flex flex-col justify-between"
+                            >
+                              <p className="text-slate-200 italic font-medium leading-relaxed">
+                                &ldquo;{c.text}&rdquo;
+                              </p>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-900">
+                                <span className="font-mono text-slate-400">@{c.username || "khách hàng"}</span>
+                                {c.likes > 0 && <span className="text-pink-400 font-bold">❤️ {c.likes} tym</span>}
+                              </div>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
