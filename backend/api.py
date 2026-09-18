@@ -100,6 +100,12 @@ class MergeFolderRequest(BaseModel):
     target_folder: str
 
 
+class UpdateMetricsRequest(BaseModel):
+    keyword: Optional[str] = None
+    limit: Optional[int] = None
+    max_workers: Optional[int] = 6
+
+
 
 def execute_pipeline(job_id: str, keyword: str, limit: int, target_folder: Optional[str] = None):
     """Background task to run Crawler (with history check, 20 new videos, comments) and AI Analysis."""
@@ -1063,6 +1069,35 @@ def get_visual_corpus_endpoint(keyword: Optional[str] = None):
     total = sum(r["cnt"] for r in rows) if rows else 0
     content_types = [{"type": r["visual_style"], "count": r["cnt"], "pct": round((r["cnt"] / max(1, total)) * 100, 1)} for r in rows]
     return {"keyword": kw, "total_classified": total, "content_types": content_types, "generated_at": None}
+
+
+@app.post("/api/update-metrics")
+def update_metrics_endpoint(req: UpdateMetricsRequest, background_tasks: BackgroundTasks):
+    """Trigger background job to refresh live views, likes, comments, and saves for crawled videos."""
+    from backend.metrics_updater import update_videos_metrics
+    kw = req.keyword.strip() if (req.keyword and req.keyword.strip()) else None
+    job_id = f"update_metrics_{str(uuid.uuid4())[:6]}"
+    db.create_job(job_id, kw or "all")
+
+    def run_update():
+        try:
+            update_videos_metrics(
+                keyword=kw,
+                limit=req.limit,
+                max_workers=req.max_workers or 6,
+                job_id=job_id
+            )
+        except Exception as e:
+            print(f"[MetricsUpdater] Job {job_id} error: {e}")
+            db.update_job(job_id, status="failed", message=str(e))
+
+    background_tasks.add_task(run_update)
+    target_desc = f"'{kw}'" if kw else "toàn bộ 1,042 video"
+    return {
+        "job_id": job_id,
+        "status": "started",
+        "message": f"Bắt đầu đồng bộ view, tim, cmt cho {target_desc}"
+    }
 
 
 if __name__ == "__main__":

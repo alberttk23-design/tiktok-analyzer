@@ -396,7 +396,47 @@ def update_video_sound(video_id: str, sound_type: str, sound_title: str = "", so
     params.append(str(video_id))
     cursor.execute(f"UPDATE videos SET {', '.join(updates)} WHERE video_id = ?", params)
     conn.commit()
+def batch_update_video_metrics(updates: list) -> int:
+    """Batch update video performance metrics (views, likes, comments, reposts, saves, score, engagement)."""
+    if not updates:
+        return 0
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.executemany("""
+    UPDATE videos SET
+        views = :views,
+        likes = :likes,
+        comments = :comments,
+        reposts = :reposts,
+        saves = :saves,
+        engagement_rate = :engagement_rate,
+        score = :score,
+        creator_followers = CASE WHEN :creator_followers > 0 THEN :creator_followers ELSE creator_followers END
+    WHERE video_id = :video_id
+    """, updates)
+    row_count = cursor.rowcount
+    conn.commit()
     conn.close()
+    return row_count
+
+
+def get_videos_for_metrics_update(keyword: str = None, limit: int = None, order_by: str = "views DESC") -> list:
+    """Fetch video records that need metric refreshes."""
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "SELECT video_id, url, creator, views, likes, comments, reposts, saves, score, creator_followers FROM videos"
+    params = []
+    if keyword and keyword.strip() and keyword.strip() != "all":
+        query += " WHERE keyword = ?"
+        params.append(keyword.strip())
+    query += f" ORDER BY {order_by}"
+    if limit and limit > 0:
+        query += " LIMIT ?"
+        params.append(limit)
+    cursor.execute(query, params)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
 
 
 def save_comments(video_id: str, comments: list) -> int:

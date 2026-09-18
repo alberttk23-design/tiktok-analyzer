@@ -51,6 +51,7 @@ import {
   Headphones,
   Volume2,
   Calendar,
+  X,
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
 
@@ -415,6 +416,16 @@ function App() {
     progress: number;
     message: string;
   } | null>(null);
+
+  // Update Video Metrics states
+  const [updatingMetrics, setUpdatingMetrics] = useState<boolean>(false);
+  const [updateMetricsJob, setUpdateMetricsJob] = useState<{
+    jobId: string;
+    progress: number;
+    message: string;
+  } | null>(null);
+  const [showUpdateMetricsModal, setShowUpdateMetricsModal] = useState<boolean>(false);
+  const [updateMetricsScope, setUpdateMetricsScope] = useState<"all" | "top50" | "top100" | "top200">("all");
 
   // Creator Intelligence & Booking states
   const [creatorsList, setCreatorsList] = useState<CreatorItem[]>([]);
@@ -1085,6 +1096,80 @@ function App() {
     }
   }
 
+  // 4. Batch Update Live Metrics (Views, Likes, Comments, Saves)
+  async function handleTriggerUpdateMetrics(scope?: "all" | "top50" | "top100" | "top200") {
+    const effectiveScope = scope || updateMetricsScope;
+    if (updatingMetrics) return;
+    setUpdatingMetrics(true);
+
+    let limit: number | null = null;
+    if (effectiveScope === "top50") limit = 50;
+    else if (effectiveScope === "top100") limit = 100;
+    else if (effectiveScope === "top200") limit = 200;
+
+    const targetKw = keyword.trim() || data?.keyword || "faux olive tree";
+    setUpdateMetricsJob({
+      jobId: "",
+      progress: 5,
+      message: `Khởi động đồng bộ chỉ số cho ${limit ? `Top ${limit}` : "toàn bộ"} video...`,
+    });
+
+    try {
+      const res = await fetch(`${API_BASE}/api/update-metrics`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: targetKw,
+          limit: limit,
+          max_workers: 6,
+        }),
+      });
+
+      if (res.ok) {
+        const json = await res.json();
+        const jobId = json.job_id;
+        if (!jobId) {
+          setUpdatingMetrics(false);
+          setUpdateMetricsJob(null);
+          return;
+        }
+
+        const poll = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
+            if (jRes.ok) {
+              const j = await jRes.json();
+              if (j) {
+                setUpdateMetricsJob({
+                  jobId: j.job_id || jobId,
+                  progress: typeof j.progress === "number" ? j.progress : 10,
+                  message: j.message || "Đang cập nhật chỉ số...",
+                });
+
+                if (j.status === "completed" || j.status === "failed") {
+                  clearInterval(poll);
+                  await loadData();
+                  setTimeout(() => {
+                    setUpdatingMetrics(false);
+                  }, 2000);
+                }
+              }
+            }
+          } catch (err) {
+            console.error("Poll update metrics error:", err);
+          }
+        }, 1200);
+      } else {
+        setUpdatingMetrics(false);
+        setUpdateMetricsJob(null);
+      }
+    } catch (e) {
+      console.error("Update metrics failed:", e);
+      setUpdatingMetrics(false);
+      setUpdateMetricsJob(null);
+    }
+  }
+
   function handleToggleSort(column: "score" | "views" | "likes" | "saves" | "comments" | "engagement") {
     if (sortBy === column) {
       setSortOrder(sortOrder === "desc" ? "asc" : "desc");
@@ -1738,6 +1823,25 @@ ${data.master_analysis.summary}\n`;
 
             <div className="flex flex-wrap items-center gap-2 pt-1 md:pt-0">
               <button
+                onClick={() => setShowUpdateMetricsModal(true)}
+                disabled={updatingMetrics}
+                className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:opacity-95 text-white font-semibold px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50 shadow-sm"
+                title="Cập nhật view, tim, comment, lưu từ TikTok cho toàn bộ video đã cào"
+              >
+                {updatingMetrics ? (
+                  <>
+                    <Loader2 size={13} className="animate-spin" />
+                    <span>Đang đồng bộ...</span>
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={13} />
+                    <span>🔄 Cập Nhật Chỉ Số ({data?.videos?.length || 1042} Video)</span>
+                  </>
+                )}
+              </button>
+
+              <button
                 onClick={handleRunMasterAI}
                 disabled={runningEngineAI}
                 className="bg-gradient-to-r from-emerald-600 to-teal-600 hover:opacity-90 text-white font-semibold px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
@@ -1814,6 +1918,27 @@ ${data.master_analysis.summary}\n`;
                 <div
                   className="bg-gradient-to-r from-pink-500 via-purple-500 to-emerald-400 h-full transition-all duration-500 rounded-full"
                   style={{ width: `${currentJob.progress}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Live Metrics Update Progress Bar */}
+          {updateMetricsJob && (
+            <div className="mt-4 pt-4 border-t border-slate-800/80">
+              <div className="flex items-center justify-between text-xs mb-2">
+                <span className="font-medium flex items-center gap-2">
+                  <RefreshCw size={14} className="animate-spin text-cyan-400" />
+                  <span className="text-cyan-200 font-semibold">{updateMetricsJob.message}</span>
+                </span>
+                <span className="font-mono text-cyan-300 font-bold bg-cyan-950/60 border border-cyan-500/30 px-2 py-0.5 rounded-lg">
+                  {updateMetricsJob.progress}%
+                </span>
+              </div>
+              <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                <div
+                  className="bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500 h-full transition-all duration-300 rounded-full shadow-sm shadow-cyan-500/50"
+                  style={{ width: `${Math.min(100, Math.max(5, updateMetricsJob.progress))}%` }}
                 />
               </div>
             </div>
@@ -3887,6 +4012,15 @@ ${data.master_analysis.summary}\n`;
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowUpdateMetricsModal(true)}
+                    disabled={updatingMetrics}
+                    className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 font-semibold px-2.5 py-1 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                    title="Cập nhật view, tim, comment, lưu từ TikTok cho danh sách video"
+                  >
+                    <RefreshCw size={11} className={updatingMetrics ? "animate-spin text-blue-400" : "text-blue-400"} />
+                    <span>Cập Nhật Chỉ Số</span>
+                  </button>
                   <div className="relative">
                     <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                     <input
@@ -6865,6 +6999,128 @@ ${data.master_analysis.summary}\n`;
                   className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
                 >
                   Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Đồng Bộ & Cập Nhật Chỉ Số Video */}
+        {showUpdateMetricsModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2.5 bg-gradient-to-tr from-blue-600 to-cyan-600 rounded-xl shadow-md text-white">
+                    <RefreshCw size={18} className={updatingMetrics ? "animate-spin" : ""} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      Cập Nhật View, Tim, Cmt Real-Time
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Làm mới chỉ số toàn bộ video đã cào từ TikTok
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowUpdateMetricsModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 text-xs text-slate-300 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Thư mục ngách:</span>
+                    <span className="font-bold text-white font-mono">📁 {keyword || data?.keyword || "faux olive tree"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Tổng video trong kho:</span>
+                    <span className="font-bold text-cyan-400 font-mono text-sm">{data?.videos?.length || 1042} video</span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 leading-relaxed pt-1 border-t border-slate-900">
+                    Hệ thống sẽ chạy đa luồng 6 workers song song, tự động bóc tách lại chỉ số mới nhất (lượt xem playCount, lượt tim diggCount, bình luận commentCount, lượt lưu collectCount) và tính toán lại điểm Viral Score.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold text-xs mb-2">
+                    Chọn phạm vi cập nhật:
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "all", label: `Toàn Bộ (${data?.videos?.length || 1042} Video)`, desc: "Đồng bộ 100% database ngách" },
+                      { id: "top100", label: "Top 100 Video", desc: "Nhanh gọn (~15 giây)" },
+                      { id: "top200", label: "Top 200 Video", desc: "Cân bằng (~30 giây)" },
+                      { id: "top50", label: "Top 50 Video", desc: "Siêu tốc (~8 giây)" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setUpdateMetricsScope(opt.id as any)}
+                        disabled={updatingMetrics}
+                        className={`p-3 rounded-2xl border text-left transition cursor-pointer ${
+                          updateMetricsScope === opt.id
+                            ? "bg-blue-600/15 border-blue-500 text-blue-300 ring-1 ring-blue-500/50"
+                            : "bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700"
+                        }`}
+                      >
+                        <div className="font-bold text-white text-xs">{opt.label}</div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{opt.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Live Progress inside modal */}
+                {updateMetricsJob && (
+                  <div className="bg-blue-950/40 border border-blue-500/40 rounded-2xl p-3.5 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-blue-200 flex items-center gap-2">
+                        <Loader2 size={13} className="animate-spin text-cyan-400" />
+                        <span className="line-clamp-1">{updateMetricsJob.message}</span>
+                      </span>
+                      <span className="font-mono font-black text-cyan-300 bg-blue-500/20 px-2 py-0.5 rounded-lg shrink-0">
+                        {updateMetricsJob.progress}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 via-cyan-400 to-indigo-500 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(100, Math.max(5, updateMetricsJob.progress))}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
+                <button
+                  onClick={() => setShowUpdateMetricsModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer"
+                >
+                  Đóng
+                </button>
+
+                <button
+                  onClick={() => handleTriggerUpdateMetrics()}
+                  disabled={updatingMetrics}
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-lg shadow-blue-600/25 cursor-pointer disabled:opacity-50"
+                >
+                  {updatingMetrics ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>Đang Cập Nhật...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play size={14} />
+                      <span>Bắt Đầu Cập Nhật</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
