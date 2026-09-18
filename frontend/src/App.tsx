@@ -3482,6 +3482,16 @@ ${data.master_analysis.summary}\n`;
                     )}
                   </button>
 
+                  <a
+                    href={`${API_BASE}/api/export/koc-csv?keyword=${encodeURIComponent(keyword)}`}
+                    download
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2.5 rounded-xl flex items-center gap-1.5 text-xs shadow-lg shadow-emerald-600/20 transition cursor-pointer"
+                    title="Xuất file danh sách KOC Booking kèm email, số follower và phân khúc ra file Excel/CSV"
+                  >
+                    <Download size={13} />
+                    <span>📥 Xuất File KOC Booking</span>
+                  </a>
+
                   <button
                     onClick={() => loadCreators()}
                     disabled={loadingCreators}

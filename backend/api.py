@@ -698,6 +698,85 @@ def export_csv(keyword: Optional[str] = Query(None)):
     )
 
 
+@app.get("/api/export/koc-csv")
+def export_koc_csv(keyword: Optional[str] = Query(None)):
+    """
+    Export full KOC discovery and booking pipeline as an Excel-compatible CSV.
+    Includes Tier, Multiplier, Followers, Bio, Booking Email, Booking Status,
+    Price, Notes, Recommendation, and Top Video Links.
+    """
+    kw = keyword
+    if not kw:
+        folders = db.get_niche_folders()
+        kw = folders[0]["name"] if folders else "faux olive tree"
+
+    creators = db.get_creators_with_analytics(kw)
+
+    output = io.StringIO()
+    output.write("\ufeff")
+
+    fieldnames = [
+        "STT", "Creator Handle", "Tên Kênh (Nickname)", "Phân Khúc (Tier)",
+        "Đòn Bẩy Viral (Views/Follower)", "Số Follower", "Email Liên Hệ (Booking)",
+        "Bio / Giới Thiệu", "Trạng Thái Booking", "Báo Giá / Chi Phí ($)",
+        "Ghi Chú Booking", "Số Video Trong Ngách", "Views Cao Nhất", "Views Trung Bình",
+        "Saves Cao Nhất", "Likes Cao Nhất", "Comments Cao Nhất", "Điểm Score Cao Nhất",
+        "Chiến Lược Hợp Tác (Recommendation)", "Link Kênh TikTok", "Link Video Viral Nhất"
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for idx, c in enumerate(creators, 1):
+        top_vids = c.get("top_videos", [])
+        top_vid_url = top_vids[0].get("url", "") if top_vids else ""
+        flw = c.get("follower_count") or 0
+        mult = c.get("viral_multiplier") or 0.0
+
+        writer.writerow({
+            "STT": idx,
+            "Creator Handle": f"@{c.get('creator', '')}",
+            "Tên Kênh (Nickname)": c.get("nickname", ""),
+            "Phân Khúc (Tier)": c.get("tier_label", ""),
+            "Đòn Bẩy Viral (Views/Follower)": f"{mult}x" if mult > 0 else "Chưa quét flw",
+            "Số Follower": flw if flw > 0 else "Chưa quét",
+            "Email Liên Hệ (Booking)": c.get("email", ""),
+            "Bio / Giới Thiệu": (c.get("signature", "") or "").replace("\n", " ").strip(),
+            "Trạng Thái Booking": c.get("booking_status", "new"),
+            "Báo Giá / Chi Phí ($)": c.get("booking_price", 0),
+            "Ghi Chú Booking": c.get("booking_notes", ""),
+            "Số Video Trong Ngách": c.get("videos_in_niche", 0),
+            "Views Cao Nhất": c.get("max_views", 0),
+            "Views Trung Bình": c.get("avg_views", 0),
+            "Saves Cao Nhất": c.get("max_saves", 0),
+            "Likes Cao Nhất": c.get("max_likes", 0),
+            "Comments Cao Nhất": c.get("max_comments", 0),
+            "Điểm Score Cao Nhất": c.get("max_score", 0),
+            "Chiến Lược Hợp Tác (Recommendation)": c.get("recommendation", ""),
+            "Link Kênh TikTok": c.get("profile_url", f"https://www.tiktok.com/@{c.get('creator', '')}"),
+            "Link Video Viral Nhất": top_vid_url
+        })
+
+    clean_kw = kw.replace(" ", "_")
+    filename = f"koc_booking_{clean_kw}.csv"
+    csv_bytes = output.getvalue().encode("utf-8")
+
+    try:
+        exports_dir = BASE_DIR / "exports"
+        exports_dir.mkdir(parents=True, exist_ok=True)
+        (exports_dir / filename).write_bytes(csv_bytes)
+    except Exception as e:
+        print(f"[Export] Notice saving local KOC CSV: {e}")
+
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+
 @app.get("/api/keyframe/{filename}")
 def get_keyframe(filename: str):
     # Security: sanitize filename to prevent path traversal
