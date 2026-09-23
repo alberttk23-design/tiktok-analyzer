@@ -82,19 +82,29 @@ def init_db():
     )
     """)
 
-    # Production Briefs table
+    # TikTok Creative Center Top Ads table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS production_briefs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    CREATE TABLE IF NOT EXISTS creative_ads (
+        id TEXT PRIMARY KEY,
         keyword TEXT,
-        title TEXT,
-        objective TEXT,
-        target_audience TEXT,
-        script TEXT,
-        guidelines TEXT,
+        brand_name TEXT,
+        ad_title TEXT,
+        ctr REAL,
+        likes INTEGER,
+        cost_level INTEGER,
+        duration REAL,
+        video_url TEXT,
+        cover_url TEXT,
+        objective_key TEXT,
+        industry_key TEXT,
+        country TEXT DEFAULT 'US',
+        period INTEGER DEFAULT 30,
+        raw_json TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_creative_ads_kw ON creative_ads(keyword)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_creative_ads_ctr ON creative_ads(ctr DESC)")
 
     # Crawl / Analysis Jobs table for tracking progress
     cursor.execute("""
@@ -810,23 +820,145 @@ def save_creative_ideas(keyword, ideas):
 
 
 def save_production_briefs(keyword, briefs):
+    """Deprecated: Production briefs feature removed."""
+    pass
+
+
+def save_creative_ads(ads: list, keyword: str = "default", country: str = "US", period: int = 30):
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM production_briefs WHERE keyword = ?", (keyword,))
-    for item in briefs:
+    saved_count = 0
+    for item in ads:
+        ad_id = str(item.get("id") or item.get("ad_id") or "")
+        if not ad_id:
+            continue
+            
+        v_info = item.get("video_info") or {}
+        duration = float(v_info.get("duration") or item.get("duration") or 0.0)
+        cover_url = str(v_info.get("cover") or item.get("cover_url") or "")
+        
+        v_url_dict = v_info.get("video_url") or {}
+        if isinstance(v_url_dict, dict):
+            video_url = v_url_dict.get("720p") or v_url_dict.get("540p") or v_url_dict.get("480p") or ""
+        else:
+            video_url = str(v_url_dict or item.get("video_url") or "")
+            
+        ctr = float(item.get("ctr") or 0.0)
+        likes = int(item.get("like") or item.get("likes") or 0)
+        cost = int(item.get("cost") or item.get("cost_level") or 1)
+        brand = str(item.get("brand_name") or "")
+        title = str(item.get("ad_title") or item.get("title") or "")
+        raw_obj = str(item.get("objective_key") or item.get("objective") or "")
+        objective = raw_obj.replace("campaign_objective_", "")
+        industry = str(item.get("industry_key") or item.get("industry") or "")
+        
         cursor.execute("""
-        INSERT INTO production_briefs (keyword, title, objective, target_audience, script, guidelines)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR REPLACE INTO creative_ads (
+            id, keyword, brand_name, ad_title, ctr, likes, cost_level,
+            duration, video_url, cover_url, objective_key, industry_key,
+            country, period, raw_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            keyword,
-            item.get("title", ""),
-            item.get("objective", ""),
-            item.get("target_audience", ""),
-            item.get("script", ""),
-            json.dumps(item.get("guidelines", []), ensure_ascii=False)
+            ad_id, keyword, brand, title, ctr, likes, cost,
+            duration, video_url, cover_url, objective, industry,
+            country, period, json.dumps(item, ensure_ascii=False)
         ))
+        saved_count += 1
     conn.commit()
     conn.close()
+    return saved_count
+
+
+def get_creative_ads(keyword: str = None, min_ctr: float = None, sort_by: str = "ctr", limit: int = 100):
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "SELECT * FROM creative_ads WHERE 1=1"
+    params = []
+    
+    if keyword and keyword.strip():
+        kw = keyword.strip()
+        query += " AND (keyword = ? OR ad_title LIKE ? OR brand_name LIKE ?)"
+        params.extend([kw, f"%{kw}%", f"%{kw}%"])
+        
+    if min_ctr is not None:
+        query += " AND ctr >= ?"
+        params.append(min_ctr)
+        
+    if sort_by == "likes":
+        query += " ORDER BY likes DESC, ctr DESC"
+    elif sort_by == "duration":
+        query += " ORDER BY duration ASC"
+    else:  # default ctr
+        query += " ORDER BY ctr DESC, likes DESC"
+        
+    query += " LIMIT ?"
+    params.append(limit)
+    
+    cursor.execute(query, tuple(params))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_creative_ads_summary(keyword: str = None):
+    conn = get_db()
+    cursor = conn.cursor()
+    query = "SELECT COUNT(*) as total, AVG(ctr) as avg_ctr, MAX(ctr) as max_ctr, AVG(duration) as avg_duration, SUM(likes) as total_likes FROM creative_ads WHERE 1=1"
+    params = []
+    if keyword and keyword.strip():
+        kw = keyword.strip()
+        query += " AND (keyword = ? OR ad_title LIKE ? OR brand_name LIKE ?)"
+        params.extend([kw, f"%{kw}%", f"%{kw}%"])
+        
+    cursor.execute(query, tuple(params))
+    summary_row = dict(cursor.fetchone() or {})
+    
+    # Top brands
+    brand_query = "SELECT brand_name, COUNT(*) as count FROM creative_ads WHERE brand_name != ''"
+    brand_params = []
+    if keyword and keyword.strip():
+        kw = keyword.strip()
+        brand_query += " AND (keyword = ? OR ad_title LIKE ? OR brand_name LIKE ?)"
+        brand_params.extend([kw, f"%{kw}%", f"%{kw}%"])
+    brand_query += " GROUP BY brand_name ORDER BY count DESC LIMIT 8"
+    cursor.execute(brand_query, tuple(brand_params))
+    top_brands = [dict(r) for r in cursor.fetchall()]
+    
+    # Top objectives
+    obj_query = "SELECT objective_key, COUNT(*) as count FROM creative_ads WHERE objective_key != ''"
+    obj_params = []
+    if keyword and keyword.strip():
+        kw = keyword.strip()
+        obj_query += " AND (keyword = ? OR ad_title LIKE ? OR brand_name LIKE ?)"
+        obj_params.extend([kw, f"%{kw}%", f"%{kw}%"])
+    obj_query += " GROUP BY objective_key ORDER BY count DESC LIMIT 6"
+    cursor.execute(obj_query, tuple(obj_params))
+    top_objectives = [dict(r) for r in cursor.fetchall()]
+    
+    conn.close()
+    return {
+        "total_ads": summary_row.get("total", 0) or 0,
+        "avg_ctr": round(summary_row.get("avg_ctr") or 0.0, 3),
+        "max_ctr": round(summary_row.get("max_ctr") or 0.0, 3),
+        "avg_duration": round(summary_row.get("avg_duration") or 0.0, 1),
+        "total_likes": summary_row.get("total_likes", 0) or 0,
+        "top_brands": top_brands,
+        "top_objectives": top_objectives
+    }
+
+
+def clear_creative_ads(keyword: str = None):
+    conn = get_db()
+    cursor = conn.cursor()
+    if keyword and keyword.strip():
+        cursor.execute("DELETE FROM creative_ads WHERE keyword = ?", (keyword.strip(),))
+    else:
+        cursor.execute("DELETE FROM creative_ads")
+    conn.commit()
+    conn.close()
+    return True
+
 
 
 def create_job(job_id, keyword):
@@ -940,7 +1072,7 @@ def delete_niche_folder(name: str, delete_data: bool = True):
         cursor.execute("DELETE FROM analysis_reviews WHERE keyword = ?", (clean_name,))
         cursor.execute("DELETE FROM comment_insights WHERE keyword = ?", (clean_name,))
         cursor.execute("DELETE FROM creative_ideas WHERE keyword = ?", (clean_name,))
-        cursor.execute("DELETE FROM production_briefs WHERE keyword = ?", (clean_name,))
+        cursor.execute("DELETE FROM creative_ads WHERE keyword = ?", (clean_name,))
         cursor.execute("DELETE FROM master_analysis WHERE keyword = ?", (clean_name,))
         cursor.execute("DELETE FROM crawl_jobs WHERE keyword = ?", (clean_name,))
     conn.commit()
@@ -960,7 +1092,7 @@ def rename_niche_folder(old_name: str, new_name: str):
     cursor.execute("UPDATE analysis_reviews SET keyword = ? WHERE keyword = ?", (new_c, old_c))
     cursor.execute("UPDATE comment_insights SET keyword = ? WHERE keyword = ?", (new_c, old_c))
     cursor.execute("UPDATE creative_ideas SET keyword = ? WHERE keyword = ?", (new_c, old_c))
-    cursor.execute("UPDATE production_briefs SET keyword = ? WHERE keyword = ?", (new_c, old_c))
+    cursor.execute("UPDATE creative_ads SET keyword = ? WHERE keyword = ?", (new_c, old_c))
     cursor.execute("UPDATE master_analysis SET keyword = ? WHERE keyword = ?", (new_c, old_c))
     cursor.execute("UPDATE crawl_jobs SET keyword = ? WHERE keyword = ?", (new_c, old_c))
     conn.commit()
@@ -985,7 +1117,7 @@ def merge_niche_folders(source_name: str, target_name: str):
     cursor.execute("UPDATE analysis_reviews SET keyword = ? WHERE keyword = ?", (tgt, src))
     cursor.execute("UPDATE comment_insights SET keyword = ? WHERE keyword = ?", (tgt, src))
     cursor.execute("UPDATE creative_ideas SET keyword = ? WHERE keyword = ?", (tgt, src))
-    cursor.execute("UPDATE production_briefs SET keyword = ? WHERE keyword = ?", (tgt, src))
+    cursor.execute("UPDATE creative_ads SET keyword = ? WHERE keyword = ?", (tgt, src))
     cursor.execute("UPDATE master_analysis SET keyword = ? WHERE keyword = ?", (tgt, src))
     cursor.execute("UPDATE crawl_jobs SET keyword = ? WHERE keyword = ?", (tgt, src))
     cursor.execute("DELETE FROM niche_folders WHERE name = ?", (src,))
@@ -1063,18 +1195,7 @@ def get_results_by_keyword(keyword=None):
                 pass
         ideas.append(item)
 
-    cursor.execute("""
-    SELECT * FROM production_briefs WHERE keyword = ? ORDER BY id ASC
-    """, (keyword,))
     briefs = []
-    for r in cursor.fetchall():
-        item = dict(r)
-        if item.get("guidelines"):
-            try:
-                item["guidelines"] = json.loads(item["guidelines"])
-            except Exception:
-                pass
-        briefs.append(item)
 
     # Attach comment insights
     cursor.execute("SELECT * FROM comment_insights WHERE keyword = ?", (keyword,))

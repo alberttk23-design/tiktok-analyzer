@@ -8,15 +8,9 @@ BASE = Path(__file__).resolve().parent
 
 
 STEPS = [
-
     "strategy_engine.py",
-
     "creative_generator.py",
-
-    "creative_review.py",
-
-    "production_brief.py"
-
+    "creative_review.py"
 ]
 
 

@@ -492,16 +492,15 @@ def run_ai_analysis_pipeline(keyword, job_id=None):
     if job_id:
         db.update_job(job_id, progress=90, message="Synthesizing winning creative concepts and objection-handling briefs...")
 
-    concepts, briefs = generate_concepts_and_briefs(keyword, videos)
+    concepts, _ = generate_concepts_and_briefs(keyword, videos)
     db.save_creative_ideas(keyword, concepts)
-    db.save_production_briefs(keyword, briefs)
 
     if job_id:
         db.update_job(
             job_id,
             status="completed",
             progress=100,
-            message=f"Complete! Analyzed {len(reviews)} videos with Voice of Customer, generated {len(concepts)} concepts & {len(briefs)} briefs."
+            message=f"Complete! Analyzed {len(reviews)} videos with Voice of Customer, generated {len(concepts)} winning creative concepts."
         )
     print(f"[AI Engine] Analysis complete for '{keyword}'.")
 

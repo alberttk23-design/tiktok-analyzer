@@ -60,6 +60,13 @@ class MultimodalBatchRequest(BaseModel):
     top_n: int = 5
 
 
+class AdsCrawlRequest(BaseModel):
+    keyword: Optional[str] = ""
+    country: Optional[str] = "US"
+    period: Optional[int] = 30
+    limit: Optional[int] = 40
+
+
 class VocAiClusterRequest(BaseModel):
     keyword: str
     engine: str = "gemini"
@@ -1119,6 +1126,59 @@ def clear_browser_session():
     """Clear cookies and tokens from browser profile when an account dies or user wants to reset."""
     import backend.session_manager as session_manager
     return session_manager.clear_session()
+
+
+@app.post("/api/ads/crawl")
+def trigger_ads_crawl(req: AdsCrawlRequest, background_tasks: BackgroundTasks):
+    """Trigger background scraping of TikTok Creative Center Top Ads."""
+    import time
+    import random
+    import backend.ads_crawler as ads_crawler
+
+    job_id = f"ads_{int(time.time())}_{random.randint(1000, 9999)}"
+    target_kw = req.keyword.strip() if req.keyword else f"Top Ads ({req.country})"
+    db.create_job(job_id, target_kw)
+
+    def run_crawl():
+        ads_crawler.crawl_creative_center_ads(
+            keyword=req.keyword,
+            country=req.country,
+            period=req.period,
+            max_ads=req.limit,
+            job_id=job_id
+        )
+
+    background_tasks.add_task(run_crawl)
+    return {
+        "job_id": job_id,
+        "keyword": target_kw,
+        "country": req.country,
+        "status": "started"
+    }
+
+
+@app.get("/api/ads/list")
+def list_creative_ads(
+    keyword: Optional[str] = Query(None),
+    min_ctr: Optional[float] = Query(None),
+    sort_by: Optional[str] = Query("ctr"),
+    limit: Optional[int] = Query(100)
+):
+    """List scraped Creative Center ads with optional filtering and metrics summary."""
+    ads = db.get_creative_ads(keyword=keyword, min_ctr=min_ctr, sort_by=sort_by, limit=limit)
+    summary = db.get_creative_ads_summary(keyword=keyword)
+    return {
+        "ads": ads,
+        "summary": summary
+    }
+
+
+@app.post("/api/ads/clear")
+def clear_creative_ads_endpoint(keyword: Optional[str] = Query(None)):
+    """Clear scraped ads for a keyword or all ads."""
+    db.clear_creative_ads(keyword=keyword)
+    return {"status": "cleared", "keyword": keyword}
+
 
 
 if __name__ == "__main__":

@@ -205,12 +205,32 @@ interface ConceptItem {
   shot_list: string[];
 }
 
-interface BriefItem {
-  title: string;
-  objective: string;
-  target_audience: string;
-  script: string;
-  guidelines: string[];
+interface CreativeAd {
+  id: string;
+  keyword: string;
+  brand_name: string;
+  ad_title: string;
+  ctr: number;
+  likes: number;
+  cost_level: number;
+  duration: number;
+  video_url: string;
+  cover_url: string;
+  objective_key: string;
+  industry_key: string;
+  country: string;
+  period: number;
+  created_at: string;
+}
+
+interface CreativeAdsSummary {
+  total_ads: number;
+  avg_ctr: number;
+  max_ctr: number;
+  avg_duration: number;
+  total_likes: number;
+  top_brands: { brand_name: string; count: number }[];
+  top_objectives: { objective_key: string; count: number }[];
 }
 
 interface MacroPatterns {
@@ -295,7 +315,7 @@ function App() {
     videos: VideoItem[];
     reviews: ReviewItem[];
     ideas: ConceptItem[];
-    briefs: BriefItem[];
+    briefs?: any[];
     comment_insights?: Record<string, CommentInsight>;
     master_analysis?: MasterAnalysis;
     master_analyses?: Record<string, MasterAnalysis>;
@@ -347,7 +367,24 @@ function App() {
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "briefs" | "database" | "koc" | "sounds" | "voc_seo">("reviews");
+  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "ads" | "database" | "koc" | "sounds" | "voc_seo">("reviews");
+
+  // Creative Center Ads states
+  const [adsList, setAdsList] = useState<CreativeAd[]>([]);
+  const [adsSummary, setAdsSummary] = useState<CreativeAdsSummary | null>(null);
+  const [adsLoading, setAdsLoading] = useState<boolean>(false);
+  const [adsCrawling, setAdsCrawling] = useState<boolean>(false);
+  const [adsKeyword, setAdsKeyword] = useState<string>("");
+  const [adsCountry, setAdsCountry] = useState<string>("US");
+  const [adsPeriod, setAdsPeriod] = useState<number>(30);
+  const [adsLimit, setAdsLimit] = useState<number>(40);
+  const [adsMinCtr, setAdsMinCtr] = useState<number>(0);
+  const [adsSortBy, setAdsSortBy] = useState<"ctr" | "likes" | "duration">("ctr");
+  const [activeAdVideo, setActiveAdVideo] = useState<CreativeAd | null>(null);
+  const [adsJobProgress, setAdsJobProgress] = useState<number>(0);
+  const [adsJobMessage, setAdsJobMessage] = useState<string>("");
+  const [copiedAdCaptionId, setCopiedAdCaptionId] = useState<string | null>(null);
+  const [adsSearchFilter, setAdsSearchFilter] = useState<string>("");
   const [selectedConcept, setSelectedConcept] = useState<ConceptItem | null>(null);
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [copiedPrompt, setCopiedPrompt] = useState(false);
@@ -701,8 +738,91 @@ function App() {
           setVisualCorpus(visJson);
         }
       } catch (_) {}
+
+      // Load Creative Center Ads
+      loadAdsData(kw);
     } catch (e) {
       console.error("Failed to load results:", e);
+    }
+  }
+
+  async function loadAdsData(targetKeyword?: string) {
+    try {
+      setAdsLoading(true);
+      const kw = targetKeyword !== undefined ? targetKeyword : adsKeyword;
+      const params = new URLSearchParams();
+      if (kw) params.append("keyword", kw);
+      if (adsMinCtr > 0) params.append("min_ctr", String(adsMinCtr));
+      params.append("sort_by", adsSortBy);
+      params.append("limit", "100");
+
+      const res = await fetch(`${API_BASE}/api/ads/list?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        setAdsList(json.ads || []);
+        setAdsSummary(json.summary || null);
+      }
+    } catch (e) {
+      console.error("Load ads error:", e);
+    } finally {
+      setAdsLoading(false);
+    }
+  }
+
+  async function triggerCrawlAds() {
+    try {
+      setAdsCrawling(true);
+      setAdsJobProgress(10);
+      setAdsJobMessage("Đang khởi chạy trình duyệt cào Creative Center...");
+      const res = await fetch(`${API_BASE}/api/ads/crawl`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: adsKeyword || keyword,
+          country: adsCountry,
+          period: adsPeriod,
+          limit: adsLimit
+        })
+      });
+      if (res.ok) {
+        const d = await res.json();
+        const jId = d.job_id;
+        const timer = setInterval(async () => {
+          try {
+            const jRes = await fetch(`${API_BASE}/api/jobs/${jId}`);
+            if (jRes.ok) {
+              const jData = await jRes.json();
+              setAdsJobProgress(jData.progress || 20);
+              setAdsJobMessage(jData.message || "Đang cào dữ liệu Ads...");
+              if (jData.status === "completed" || jData.status === "failed" || jData.status === "error") {
+                clearInterval(timer);
+                setAdsCrawling(false);
+                loadAdsData();
+              }
+            }
+          } catch (err) {
+            console.error("Job poll error:", err);
+            clearInterval(timer);
+            setAdsCrawling(false);
+          }
+        }, 1500);
+      } else {
+        setAdsCrawling(false);
+      }
+    } catch (e) {
+      console.error("Trigger ads error:", e);
+      setAdsCrawling(false);
+    }
+  }
+
+  async function handleClearAds() {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa danh sách Creative Ads này?")) return;
+    try {
+      await fetch(`${API_BASE}/api/ads/clear?keyword=${encodeURIComponent(adsKeyword || keyword)}`, { method: "POST" });
+      setAdsList([]);
+      setAdsSummary(null);
+    } catch (e) {
+      console.error("Clear ads error:", e);
     }
   }
 
@@ -2149,15 +2269,18 @@ ${data.master_analysis.summary}\n`;
           </button>
 
           <button
-            onClick={() => setActiveTab("briefs")}
+            onClick={() => {
+              setActiveTab("ads");
+              if (adsList.length === 0) loadAdsData();
+            }}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "briefs"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20"
+              activeTab === "ads"
+                ? "bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 text-white shadow-lg shadow-rose-600/25 font-bold"
                 : "text-slate-400 hover:text-white hover:bg-slate-900"
             }`}
           >
-            <FileText size={16} />
-            <span>Production Briefs ({data?.briefs?.length || 0})</span>
+            <Flame size={16} className={activeTab === "ads" ? "text-amber-300 animate-pulse" : "text-rose-500"} />
+            <span>🎯 Creative Center Ads ({adsList.length})</span>
           </button>
 
           <button
@@ -3969,76 +4092,570 @@ ${data.master_analysis.summary}\n`;
           </div>
         )}
 
-        {/* TAB 4: PRODUCTION BRIEFS */}
-        {activeTab === "briefs" && (
-          <div className="space-y-5">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <FileText className="text-emerald-400" size={22} />
-              Production Briefs Sẵn Sàng Giao Cho Creator (Bẻ Gãy Mọi Rào Cản Mua Hàng)
-            </h2>
+        {/* TAB 4: CREATIVE CENTER ADS (Top Auction Ads Intelligence) */}
+        {activeTab === "ads" && (
+          <div className="space-y-6">
+            {/* Top Control Panel */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-rose-950/30 border border-slate-800 rounded-3xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-96 h-96 bg-rose-600/10 rounded-full blur-3xl pointer-events-none" />
 
-            {(!data?.briefs || data.briefs.length === 0) ? (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
-                <FileText size={40} className="mx-auto mb-3 text-slate-600" />
-                <p>Chưa có production brief nào.</p>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-800/80 mb-6">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-rose-400 uppercase tracking-widest mb-1.5">
+                    <Flame size={16} className="animate-pulse" />
+                    <span>TikTok Creative Center • Top Auction Ads Intelligence</span>
+                  </div>
+                  <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
+                    Thư Viện Ads Thắng Cuộc (Top CTR & Chuyển Đổi)
+                  </h2>
+                  <p className="text-xs md:text-sm text-slate-400 mt-1">
+                    Cào trực tiếp dữ liệu video quảng cáo đấu thầu hiệu suất cao nhất tại Mỹ & Toàn cầu qua Playwright và phiên đăng nhập thật.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => loadAdsData()}
+                    disabled={adsLoading}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 text-slate-200 text-xs font-medium border border-slate-700/80 transition cursor-pointer"
+                    title="Tải lại danh sách"
+                  >
+                    <RefreshCw size={14} className={adsLoading ? "animate-spin text-rose-400" : ""} />
+                    <span>Tải Lại</span>
+                  </button>
+
+                  {adsList.length > 0 && (
+                    <button
+                      onClick={handleClearAds}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/50 text-rose-300 text-xs font-medium border border-rose-800/60 transition cursor-pointer"
+                      title="Xóa danh sách Ads hiện tại"
+                    >
+                      <Trash2 size={14} />
+                      <span>Xóa Ads</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Crawler Form Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 items-end">
+                <div className="lg:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Từ khoá / Ngách sản phẩm:
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                    <input
+                      type="text"
+                      value={adsKeyword}
+                      onChange={(e) => setAdsKeyword(e.target.value)}
+                      placeholder={`VD: ${keyword || "olive tree, skincare, fashion..."} (hoặc để trống để cào Top chung)`}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-3.5 py-2.5 text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-rose-500 transition"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Thị Trường (Quốc gia):
+                  </label>
+                  <select
+                    value={adsCountry}
+                    onChange={(e) => setAdsCountry(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs md:text-sm text-white focus:outline-none focus:border-rose-500 transition"
+                  >
+                    <option value="US">🇺🇸 United States (Mỹ)</option>
+                    <option value="VN">🇻🇳 Vietnam (Việt Nam)</option>
+                    <option value="GB">🇬🇧 United Kingdom (Anh)</option>
+                    <option value="CA">🇨🇦 Canada</option>
+                    <option value="AU">🇦🇺 Australia (Úc)</option>
+                    <option value="DE">🇩🇪 Germany (Đức)</option>
+                    <option value="FR">🇫🇷 France (Pháp)</option>
+                    <option value="JP">🇯🇵 Japan (Nhật)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Khoảng thời gian:
+                  </label>
+                  <select
+                    value={adsPeriod}
+                    onChange={(e) => setAdsPeriod(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs md:text-sm text-white focus:outline-none focus:border-rose-500 transition"
+                  >
+                    <option value={7}>7 Ngày Qua (Mới nhất)</option>
+                    <option value={30}>30 Ngày Qua (Chuẩn win)</option>
+                    <option value={180}>180 Ngày Qua (Mẫu lớn)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Số lượng Ads:
+                  </label>
+                  <select
+                    value={adsLimit}
+                    onChange={(e) => setAdsLimit(Number(e.target.value))}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs md:text-sm text-white focus:outline-none focus:border-rose-500 transition"
+                  >
+                    <option value={20}>20 Ads</option>
+                    <option value={40}>40 Ads (Chuẩn)</option>
+                    <option value={60}>60 Ads</option>
+                    <option value={100}>100 Ads (Đào sâu)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <button
+                    onClick={triggerCrawlAds}
+                    disabled={adsCrawling}
+                    className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-red-600 via-rose-600 to-pink-600 hover:from-red-500 hover:to-pink-500 disabled:opacity-50 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-rose-600/30 text-xs md:text-sm transition cursor-pointer"
+                  >
+                    {adsCrawling ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin" />
+                        <span>Đang Cào Ads...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Flame size={16} className="text-amber-300 animate-pulse" />
+                        <span>Cào Ads Ngay</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Crawl Progress Bar */}
+              {adsCrawling && (
+                <div className="mt-5 p-4 rounded-2xl bg-rose-950/40 border border-rose-800/60 animate-fadeIn">
+                  <div className="flex items-center justify-between text-xs text-rose-200 mb-2 font-medium">
+                    <span className="flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin text-rose-400" />
+                      {adsJobMessage || "Đang xử lý Playwright và cào Top Ads..."}
+                    </span>
+                    <span className="font-mono font-bold text-white">{adsJobProgress}%</span>
+                  </div>
+                  <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
+                    <div
+                      className="bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${adsJobProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Summary Metrics Bar */}
+            {adsSummary && adsSummary.total_ads > 0 && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                    <span className="text-xs text-slate-400 block mb-1">Tổng Số Ads Đã Cào</span>
+                    <div className="text-2xl font-black text-white flex items-center gap-1.5">
+                      <Flame size={20} className="text-rose-500" />
+                      {adsSummary.total_ads} <span className="text-xs font-normal text-slate-400">Ads</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                    <span className="text-xs text-slate-400 block mb-1">CTR Đỉnh Cao Nhất</span>
+                    <div className="text-2xl font-black text-emerald-400">
+                      {(adsSummary.max_ctr * 100).toFixed(0)}%{" "}
+                      <span className="text-xs font-semibold text-emerald-500/90 bg-emerald-950/60 border border-emerald-800/50 px-2 py-0.5 rounded-full ml-1">
+                        Top {Math.max(1, Math.round((1 - adsSummary.max_ctr) * 100))}%
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                    <span className="text-xs text-slate-400 block mb-1">CTR Trung Bình Ngành</span>
+                    <div className="text-2xl font-black text-amber-300">
+                      {(adsSummary.avg_ctr * 100).toFixed(1)}%
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900/80 border border-slate-800/90 rounded-2xl p-4 shadow-lg">
+                    <span className="text-xs text-slate-400 block mb-1">Tổng Tương Tác & Thời Lượng</span>
+                    <div className="text-2xl font-black text-pink-400 flex items-center gap-1.5">
+                      <Heart size={20} className="text-pink-500" />
+                      {adsSummary.total_likes.toLocaleString()}
+                    </div>
+                    <span className="text-[11px] text-slate-400 mt-0.5 block">Thời lượng TB: {adsSummary.avg_duration}s</span>
+                  </div>
+                </div>
+
+                {/* Brands and Objectives tags */}
+                <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
+                  <span className="text-slate-400 font-semibold flex items-center gap-1">
+                    <Award size={14} className="text-amber-400" /> Top Brands:
+                  </span>
+                  {adsSummary.top_brands.map((b, i) => (
+                    <span
+                      key={i}
+                      className="bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-lg text-slate-200 font-medium"
+                    >
+                      {b.brand_name} <span className="text-rose-400">({b.count})</span>
+                    </span>
+                  ))}
+
+                  <span className="text-slate-400 font-semibold flex items-center gap-1 ml-3">
+                    <Target size={14} className="text-purple-400" /> Mục Tiêu:
+                  </span>
+                  {adsSummary.top_objectives.map((o, i) => (
+                    <span
+                      key={i}
+                      className="bg-purple-950/40 border border-purple-800/50 px-2.5 py-1 rounded-lg text-purple-300 font-medium capitalize"
+                    >
+                      {o.objective_key} <span className="text-slate-400">({o.count})</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Filter & Search Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 border border-slate-800/80 rounded-2xl p-3.5">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                <Search size={15} className="text-slate-500 shrink-0" />
+                <input
+                  type="text"
+                  value={adsSearchFilter}
+                  onChange={(e) => setAdsSearchFilter(e.target.value)}
+                  placeholder="Lọc nhanh theo tên nhãn hàng hoặc nội dung caption..."
+                  className="w-full bg-transparent text-xs md:text-sm text-white placeholder-slate-500 focus:outline-none"
+                />
+                {adsSearchFilter && (
+                  <button onClick={() => setAdsSearchFilter("")} className="text-slate-500 hover:text-white">
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2.5 flex-wrap text-xs">
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
+                  <Filter size={13} className="text-slate-400" />
+                  <select
+                    value={adsMinCtr}
+                    onChange={(e) => {
+                      setAdsMinCtr(Number(e.target.value));
+                      loadAdsData();
+                    }}
+                    className="bg-transparent text-white focus:outline-none"
+                  >
+                    <option value={0}>Tất cả mức CTR</option>
+                    <option value={0.9}>🔥 Top 1% CTR (&gt;= 90%)</option>
+                    <option value={0.7}>⭐ Top 5% CTR (&gt;= 70%)</option>
+                    <option value={0.5}>⚡ Top 10% CTR (&gt;= 50%)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
+                  <ArrowUpDown size={13} className="text-slate-400" />
+                  <select
+                    value={adsSortBy}
+                    onChange={(e) => {
+                      setAdsSortBy(e.target.value as "ctr" | "likes" | "duration");
+                      loadAdsData();
+                    }}
+                    className="bg-transparent text-white focus:outline-none"
+                  >
+                    <option value="ctr">Sắp xếp: CTR cao nhất</option>
+                    <option value="likes">Sắp xếp: Nhiều Likes nhất</option>
+                    <option value="duration">Sắp xếp: Thời lượng ngắn nhất</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Ads List Content */}
+            {adsLoading && adsList.length === 0 ? (
+              <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-16 text-center text-slate-400">
+                <Loader2 size={40} className="animate-spin text-rose-500 mx-auto mb-3" />
+                <p className="text-sm font-medium">Đang tải danh sách Creative Center Ads...</p>
+              </div>
+            ) : adsList.length === 0 ? (
+              <div className="bg-slate-900/40 border border-slate-800 rounded-3xl p-16 text-center text-slate-400 space-y-3">
+                <Flame size={44} className="text-rose-500/60 mx-auto" />
+                <h3 className="text-lg font-bold text-white">Chưa có dữ liệu Ads nào</h3>
+                <p className="text-xs md:text-sm text-slate-400 max-w-md mx-auto">
+                  Nhập từ khoá sản phẩm ngách của bạn ở trên và bấm <strong>&ldquo;Cào Ads Ngay&rdquo;</strong> để Playwright tự động quét trọn gói các chiến dịch quảng cáo đấu thầu win lớn nhất từ TikTok Creative Center!
+                </p>
+                <div className="pt-2">
+                  <button
+                    onClick={triggerCrawlAds}
+                    className="bg-gradient-to-r from-red-600 to-rose-600 text-white font-bold px-5 py-2.5 rounded-xl shadow-lg shadow-rose-600/20 text-xs transition cursor-pointer"
+                  >
+                    🚀 Bắt Đầu Cào Thử Ngay
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="grid gap-5">
-                {data.briefs.map((brief, idx) => (
-                  <div
-                    key={idx}
-                    className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 md:p-7 shadow-xl"
-                  >
-                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 pb-4 border-b border-slate-800 mb-5">
-                      <div>
-                        <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
-                          Brief #{idx + 1}
-                        </span>
-                        <h3 className="text-xl font-bold text-white">{brief.title}</h3>
-                      </div>
-                      <div className="bg-emerald-950/50 border border-emerald-800/60 px-4 py-1.5 rounded-xl text-xs text-emerald-300 font-medium">
-                        Mục tiêu: {brief.objective}
-                      </div>
-                    </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {adsList
+                  .filter((ad) => {
+                    if (!adsSearchFilter) return true;
+                    const f = adsSearchFilter.toLowerCase();
+                    return (
+                      (ad.ad_title && ad.ad_title.toLowerCase().includes(f)) ||
+                      (ad.brand_name && ad.brand_name.toLowerCase().includes(f))
+                    );
+                  })
+                  .map((ad, idx) => {
+                    const ctrPct = Math.round(ad.ctr * 100);
+                    const isTop1 = ad.ctr >= 0.9;
+                    const isTop5 = ad.ctr >= 0.7;
+                    const durationSec = Math.round(ad.duration);
+                    const mins = Math.floor(durationSec / 60);
+                    const secs = (durationSec % 60).toString().padStart(2, "0");
 
-                    <div className="grid md:grid-cols-3 gap-6">
-                      <div className="md:col-span-2 space-y-4">
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                            Chân Dung Khách Hàng Mục Tiêu
-                          </h4>
-                          <p className="text-sm text-slate-200">{brief.target_audience}</p>
+                    return (
+                      <div
+                        key={ad.id || idx}
+                        className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-xl hover:border-rose-500/60 hover:-translate-y-1 transition flex flex-col justify-between group"
+                      >
+                        {/* Cover Image & Overlay */}
+                        <div
+                          className="relative aspect-[9/16] max-h-72 w-full bg-slate-950 overflow-hidden cursor-pointer"
+                          onClick={() => setActiveAdVideo(ad)}
+                        >
+                          {ad.cover_url ? (
+                            <img
+                              src={ad.cover_url}
+                              alt={ad.ad_title}
+                              className="w-full h-full object-cover group-hover:scale-105 transition duration-500"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-slate-700">
+                              <Film size={36} />
+                            </div>
+                          )}
+
+                          {/* Top Badges */}
+                          <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-1 pointer-events-none">
+                            <span
+                              className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-lg ${
+                                isTop1
+                                  ? "bg-gradient-to-r from-red-600 to-rose-600 text-white border border-rose-400/40"
+                                  : isTop5
+                                  ? "bg-amber-500 text-slate-950 font-black border border-amber-300/40"
+                                  : "bg-slate-900/90 text-slate-200 border border-slate-700"
+                              }`}
+                            >
+                              {isTop1 ? `🔥 Top 1% CTR (${ctrPct}%)` : isTop5 ? `⭐ Top 5% CTR (${ctrPct}%)` : `CTR ${ctrPct}%`}
+                            </span>
+
+                            <span className="bg-black/70 backdrop-blur-md text-white text-[11px] font-mono px-2 py-0.5 rounded-md border border-white/10">
+                              {mins}:{secs}
+                            </span>
+                          </div>
+
+                          {/* Hover Play Button Overlay */}
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                            <div className="w-12 h-12 rounded-full bg-rose-600/90 text-white flex items-center justify-center shadow-xl transform scale-90 group-hover:scale-100 transition">
+                              <Play size={20} fill="white" className="ml-0.5" />
+                            </div>
+                          </div>
                         </div>
 
-                        <div>
-                          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
-                            Kịch Bản Chi Tiết & Hướng Dẫn Quay
-                          </h4>
-                          <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800 text-xs md:text-sm text-slate-200 whitespace-pre-line leading-relaxed font-mono">
-                            {brief.script}
+                        {/* Card Body */}
+                        <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                          <div>
+                            {/* Brand & Objective */}
+                            <div className="flex items-center justify-between gap-1.5 mb-2 text-[11px]">
+                              <span className="font-bold text-rose-400 bg-rose-950/50 border border-rose-800/50 px-2 py-0.5 rounded-md truncate max-w-[150px]">
+                                {ad.brand_name || "Nhãn hàng kín"}
+                              </span>
+                              <span className="text-slate-400 bg-slate-950 px-2 py-0.5 rounded-md border border-slate-800 capitalize">
+                                {ad.objective_key || "Ad"}
+                              </span>
+                            </div>
+
+                            {/* Caption / Title */}
+                            <p
+                              className="text-xs text-slate-200 line-clamp-3 leading-relaxed font-normal hover:line-clamp-none transition cursor-pointer"
+                              title={ad.ad_title}
+                            >
+                              {ad.ad_title || "Không có tiêu đề"}
+                            </p>
+                          </div>
+
+                          {/* Metric Chips */}
+                          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+                            <span className="flex items-center gap-1 font-medium text-pink-400">
+                              <Heart size={13} className="text-pink-500" fill="currentColor" />
+                              {ad.likes.toLocaleString()}
+                            </span>
+                            <span className="text-[11px] text-slate-400">
+                              Mức chi: {ad.cost_level === 0 ? "Thấp" : ad.cost_level === 1 ? "Vừa" : "Cao"}
+                            </span>
+                          </div>
+
+                          {/* Action Footer */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            <button
+                              onClick={() => setActiveAdVideo(ad)}
+                              className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-medium transition cursor-pointer"
+                            >
+                              <Play size={13} fill="currentColor" />
+                              <span>Xem Video</span>
+                            </button>
+
+                            {ad.video_url ? (
+                              <a
+                                href={ad.video_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                download
+                                className="flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-xl bg-rose-950/60 hover:bg-rose-900/70 border border-rose-800/60 text-rose-200 text-xs font-medium transition"
+                              >
+                                <Download size={13} />
+                                <span>Tải MP4</span>
+                              </a>
+                            ) : (
+                              <button
+                                disabled
+                                className="py-1.5 px-2 rounded-xl bg-slate-950 text-slate-600 text-xs"
+                              >
+                                Không có link
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>
+                    );
+                  })}
+              </div>
+            )}
 
+            {/* Video Player Modal */}
+            {activeAdVideo && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col lg:flex-row shadow-2xl relative">
+                  <button
+                    onClick={() => setActiveAdVideo(null)}
+                    className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-slate-950/80 hover:bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700/80 transition cursor-pointer"
+                  >
+                    <X size={18} />
+                  </button>
+
+                  {/* Video Viewport */}
+                  <div className="lg:w-7/12 bg-black flex items-center justify-center p-2">
+                    {activeAdVideo.video_url ? (
+                      <video
+                        src={activeAdVideo.video_url}
+                        controls
+                        autoPlay
+                        className="w-full max-h-[75vh] object-contain rounded-2xl"
+                      />
+                    ) : (
+                      <div className="p-12 text-center text-slate-500">
+                        <Film size={48} className="mx-auto mb-2" />
+                        <p>Video không có URL trực tiếp.</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Video Info Sidebar */}
+                  <div className="lg:w-5/12 p-6 flex flex-col justify-between space-y-4 overflow-y-auto">
+                    <div className="space-y-4">
                       <div>
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                          Quy Chuẩn Khi Quay
-                        </h4>
-                        <ul className="space-y-2 text-xs text-slate-300">
-                          {brief.guidelines?.map((g, gi) => (
-                            <li
-                              key={gi}
-                              className="bg-slate-950 p-2.5 rounded-xl border border-slate-800/80 flex items-start gap-2"
-                            >
-                              <CheckCircle2 size={14} className="text-emerald-400 shrink-0 mt-0.5" />
-                              <span>{g}</span>
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-bold text-rose-400 bg-rose-950/60 border border-rose-800/60 px-2.5 py-0.5 rounded-md">
+                            {activeAdVideo.brand_name || "Nhãn hàng không công khai"}
+                          </span>
+                          <span className="text-xs text-slate-400 bg-slate-950 px-2.5 py-0.5 rounded-md border border-slate-800 capitalize">
+                            {activeAdVideo.objective_key}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-white leading-snug">
+                          {activeAdVideo.brand_name ? `Quảng cáo của ${activeAdVideo.brand_name}` : "Chiến dịch Top Ads Creative Center"}
+                        </h3>
+                      </div>
+
+                      {/* Performance Metric Badges */}
+                      <div className="grid grid-cols-2 gap-2.5 text-xs">
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Xếp Hạng CTR</span>
+                          <span className="font-black text-emerald-400 text-sm">
+                            {(activeAdVideo.ctr * 100).toFixed(0)}% (Top {Math.max(1, Math.round((1 - activeAdVideo.ctr) * 100))}%)
+                          </span>
+                        </div>
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Lượt Thích</span>
+                          <span className="font-black text-pink-400 text-sm">
+                            {activeAdVideo.likes.toLocaleString()} ❤️
+                          </span>
+                        </div>
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Thời Lượng</span>
+                          <span className="font-bold text-white text-sm">
+                            {activeAdVideo.duration.toFixed(1)} giây
+                          </span>
+                        </div>
+                        <div className="bg-slate-950 p-3 rounded-xl border border-slate-800">
+                          <span className="text-slate-400 block text-[11px] mb-0.5">Quốc Gia & Chu Kỳ</span>
+                          <span className="font-bold text-slate-300 text-sm">
+                            {activeAdVideo.country || "US"} • {activeAdVideo.period || 30} ngày
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Ad Caption & Script */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs font-semibold text-slate-300 mb-1.5">
+                          <span>Nội Dung / Ad Copy:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(activeAdVideo.ad_title);
+                              setCopiedAdCaptionId(activeAdVideo.id);
+                              setTimeout(() => setCopiedAdCaptionId(null), 2000);
+                            }}
+                            className="flex items-center gap-1 text-rose-400 hover:text-rose-300 cursor-pointer"
+                          >
+                            {copiedAdCaptionId === activeAdVideo.id ? (
+                              <>
+                                <Check size={12} />
+                                <span>Đã chép</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy size={12} />
+                                <span>Sao chép</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                        <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-200 leading-relaxed max-h-40 overflow-y-auto">
+                          {activeAdVideo.ad_title}
+                        </div>
                       </div>
                     </div>
+
+                    {/* Bottom Action Buttons */}
+                    <div className="pt-2 border-t border-slate-800 flex gap-2">
+                      {activeAdVideo.video_url && (
+                        <a
+                          href={activeAdVideo.video_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          download
+                          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs shadow-lg transition"
+                        >
+                          <Download size={14} />
+                          <span>Tải Video Gốc (MP4 HD)</span>
+                        </a>
+                      )}
+                      <button
+                        onClick={() => setActiveAdVideo(null)}
+                        className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition cursor-pointer"
+                      >
+                        Đóng
+                      </button>
+                    </div>
                   </div>
-                ))}
+                </div>
               </div>
             )}
           </div>
