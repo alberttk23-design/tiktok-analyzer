@@ -52,6 +52,7 @@ import {
   Volume2,
   Calendar,
   X,
+  Globe,
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
 
@@ -427,6 +428,18 @@ function App() {
   const [showUpdateMetricsModal, setShowUpdateMetricsModal] = useState<boolean>(false);
   const [updateMetricsScope, setUpdateMetricsScope] = useState<"all" | "top50" | "top100" | "top200">("all");
 
+  // TikTok Account Session & Login states
+  const [sessionStatus, setSessionStatus] = useState<{
+    is_logged_in: boolean;
+    status: string;
+    message: string;
+    cookie_count: number;
+    auth_keys?: string[];
+  } | null>(null);
+  const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
+  const [openingBrowser, setOpeningBrowser] = useState<boolean>(false);
+  const [clearingSession, setClearingSession] = useState<boolean>(false);
+
   // Creator Intelligence & Booking states
   const [creatorsList, setCreatorsList] = useState<CreatorItem[]>([]);
   const [loadingCreators, setLoadingCreators] = useState<boolean>(false);
@@ -701,8 +714,54 @@ function App() {
         const hist = await histRes.json();
         setHistoryCount(hist.total_crawled_videos || 0);
       }
+      await checkSessionStatus();
     } catch (e) {
       console.error("Failed to load keywords:", e);
+    }
+  }
+
+  async function checkSessionStatus() {
+    try {
+      const res = await fetch(`${API_BASE}/api/browser-session/status`);
+      if (res.ok) {
+        const json = await res.json();
+        setSessionStatus(json);
+      }
+    } catch (e) {
+      console.error("Failed to check browser session status:", e);
+    }
+  }
+
+  async function handleOpenLoginBrowser(targetUrl: string = "https://www.tiktok.com/login") {
+    setOpeningBrowser(true);
+    try {
+      await fetch(`${API_BASE}/api/browser-session/open?target_url=${encodeURIComponent(targetUrl)}`, {
+        method: "POST",
+      });
+      setTimeout(checkSessionStatus, 3000);
+      setTimeout(checkSessionStatus, 8000);
+      setTimeout(checkSessionStatus, 15000);
+    } catch (e) {
+      console.error("Open login browser error:", e);
+    } finally {
+      setOpeningBrowser(false);
+    }
+  }
+
+  async function handleClearSession() {
+    if (!window.confirm("Bạn có chắc chắn muốn xóa sạch phiên đăng nhập TikTok và cookie? (Dùng khi acc bị die hoặc muốn đổi nick khác)")) {
+      return;
+    }
+    setClearingSession(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/browser-session/clear`, { method: "POST" });
+      if (res.ok) {
+        await checkSessionStatus();
+      }
+    } catch (e) {
+      console.error("Clear session error:", e);
+    } finally {
+      setClearingSession(false);
     }
   }
 
@@ -1728,6 +1787,26 @@ ${data.master_analysis.summary}\n`;
                 <span className="hidden md:inline">Quản Lý ({foldersList.length})</span>
               </button>
             </div>
+
+            {/* TikTok Account Session & Login Button */}
+            <button
+              onClick={() => {
+                checkSessionStatus();
+                setShowSessionModal(true);
+              }}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-2 transition cursor-pointer shadow-sm ${
+                sessionStatus?.is_logged_in
+                  ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60"
+                  : "bg-slate-900/90 border-slate-700/80 text-slate-300 hover:text-white hover:border-slate-600"
+              }`}
+              title="Quản lý tài khoản TikTok cào dữ liệu, đăng nhập nick mới hoặc đổi nick khi cần"
+            >
+              <span className={`w-2 h-2 rounded-full ${sessionStatus?.is_logged_in ? "bg-emerald-400 animate-pulse" : "bg-slate-500"}`} />
+              <Globe size={14} className={sessionStatus?.is_logged_in ? "text-emerald-400" : "text-slate-400"} />
+              <span>
+                {sessionStatus?.is_logged_in ? "Acc Cào: Đã Login" : "Acc Cào: Khách (Chưa Login)"}
+              </span>
+            </button>
           </div>
         </header>
 
@@ -7121,6 +7200,155 @@ ${data.master_analysis.summary}\n`;
                       <span>Bắt Đầu Cập Nhật</span>
                     </>
                   )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Quản Lý Tài Khoản TikTok & Cửa Sổ Trình Duyệt */}
+        {showSessionModal && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 shadow-2xl overflow-hidden">
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className={`p-2.5 rounded-xl shadow-md text-white ${sessionStatus?.is_logged_in ? "bg-gradient-to-tr from-emerald-600 to-teal-600" : "bg-gradient-to-tr from-slate-700 to-slate-800"}`}>
+                    <Globe size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">
+                      Quản Lý Tài Khoản TikTok (Playwright Profile)
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Tự do đăng nhập, đổi nick, hoặc reset phiên khi nick die
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSessionModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-6">
+                {/* Status Box */}
+                <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 text-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Trạng thái phiên cào:</span>
+                    <span className={`font-bold font-mono px-2.5 py-0.5 rounded-full border text-[11px] flex items-center gap-1.5 ${
+                      sessionStatus?.is_logged_in 
+                        ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-400" 
+                        : "bg-amber-950/60 border-amber-500/40 text-amber-300"
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full ${sessionStatus?.is_logged_in ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`} />
+                      {sessionStatus?.is_logged_in ? "ĐÃ ĐĂNG NHẬP" : "CHẾ ĐỘ KHÁCH (CHƯA LOGIN)"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-slate-400">
+                    <span>Số lượng cookies lưu trữ:</span>
+                    <span className="font-mono text-white font-semibold">{sessionStatus?.cookie_count || 0} cookies</span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-400 leading-relaxed pt-2 border-t border-slate-900">
+                    {sessionStatus?.is_logged_in ? (
+                      <span className="text-emerald-300">
+                        ✓ Trình duyệt cào đã có phiên đăng nhập TikTok. Toàn bộ tiến trình cào video, cào comments và Creative Center Ads sẽ tự động sử dụng tài khoản này.
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">
+                        💡 Bạn có thể bấm nút dưới để mở cửa sổ trình duyệt, quét mã QR đăng nhập 1 tài khoản phụ (acc clone). Trình duyệt sẽ nhớ mãi mãi để không bị popup làm phiền.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Primary Action: Open Real Browser Window */}
+                <div className="space-y-2">
+                  <button
+                    onClick={() => handleOpenLoginBrowser("https://www.tiktok.com/login")}
+                    disabled={openingBrowser}
+                    className="w-full bg-gradient-to-r from-violet-600 via-purple-600 to-pink-600 hover:opacity-95 text-white font-bold p-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-600/25 transition cursor-pointer disabled:opacity-50"
+                  >
+                    {openingBrowser ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin" />
+                        <span>Đang mở cửa sổ trình duyệt trên màn hình...</span>
+                      </>
+                    ) : (
+                      <>
+                        <ExternalLink size={15} />
+                        <span>🚀 Mở Cửa Sổ Trình Duyệt Đăng Nhập / Đổi Acc</span>
+                      </>
+                    )}
+                  </button>
+                  <p className="text-[11px] text-slate-400 text-center">
+                    Cửa sổ Chrome thật sẽ hiện lên màn hình. Bạn quét QR hoặc đăng nhập/đăng xuất nick tùy ý, sau đó chỉ cần tắt cửa sổ là xong!
+                  </p>
+                </div>
+
+                {/* Secondary Actions: Quick URLs */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={() => handleOpenLoginBrowser("https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en")}
+                    disabled={openingBrowser}
+                    className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white p-2.5 rounded-xl text-xs font-medium transition cursor-pointer text-left flex items-center gap-2"
+                    title="Mở TikTok Creative Center Top Ads trên trình duyệt"
+                  >
+                    <Flame size={13} className="text-amber-400 shrink-0" />
+                    <span className="truncate">Creative Center Ads</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenLoginBrowser("https://www.tiktok.com")}
+                    disabled={openingBrowser}
+                    className="bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white p-2.5 rounded-xl text-xs font-medium transition cursor-pointer text-left flex items-center gap-2"
+                    title="Mở trang chủ TikTok để xem trang cá nhân hoặc feed"
+                  >
+                    <Globe size={13} className="text-sky-400 shrink-0" />
+                    <span className="truncate">Trang Chủ TikTok</span>
+                  </button>
+                </div>
+
+                {/* Account Reset / Clear Session for Dead Accounts */}
+                <div className="pt-2 border-t border-slate-800/80">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-slate-300">Acc bị die hoặc muốn làm sạch?</div>
+                      <div className="text-[11px] text-slate-500">Xóa trắng toàn bộ cookie phiên đăng nhập cũ</div>
+                    </div>
+                    <button
+                      onClick={handleClearSession}
+                      disabled={clearingSession}
+                      className="bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                    >
+                      {clearingSession ? (
+                        <Loader2 size={12} className="animate-spin" />
+                      ) : (
+                        <Trash2 size={12} />
+                      )}
+                      <span>Xóa Phiên / Reset Acc</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-800/80 pt-4">
+                <button
+                  onClick={checkSessionStatus}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition"
+                >
+                  <RefreshCw size={12} />
+                  <span>Kiểm Tra Lại</span>
+                </button>
+
+                <button
+                  onClick={() => setShowSessionModal(false)}
+                  className="bg-slate-800 hover:bg-slate-700 text-white px-5 py-2 rounded-xl text-xs font-bold cursor-pointer transition"
+                >
+                  Đóng
                 </button>
               </div>
             </div>

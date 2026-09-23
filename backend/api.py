@@ -1100,6 +1100,27 @@ def update_metrics_endpoint(req: UpdateMetricsRequest, background_tasks: Backgro
     }
 
 
+@app.get("/api/browser-session/status")
+def get_browser_session_status():
+    """Check if the crawler Playwright profile has an active logged-in TikTok session."""
+    import backend.session_manager as session_manager
+    return session_manager.get_session_status()
+
+
+@app.post("/api/browser-session/open")
+def open_browser_for_login(target_url: Optional[str] = "https://www.tiktok.com/login"):
+    """Launch interactive GUI browser on screen so the user can log in, switch acc, or solve captcha."""
+    import backend.session_manager as session_manager
+    return session_manager.launch_gui_browser_for_login(target_url=target_url or "https://www.tiktok.com/login")
+
+
+@app.post("/api/browser-session/clear")
+def clear_browser_session():
+    """Clear cookies and tokens from browser profile when an account dies or user wants to reset."""
+    import backend.session_manager as session_manager
+    return session_manager.clear_session()
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("backend.api:app", host="127.0.0.1", port=8000, reload=True)
