@@ -865,6 +865,28 @@ def analyze_top_multimodal_endpoint(req: MultimodalBatchRequest, background_task
     }
 
 
+@app.get("/api/creators/trending-growth")
+def get_trending_growth_endpoint(
+    keyword: Optional[str] = None,
+    timeframe: str = "3m",
+    min_videos: int = 1,
+    sort_by: str = "growth_score",
+    limit: int = 50
+):
+    """
+    Retrieve creators ranked by growth velocity and trending momentum across timeframes:
+    1m (30 days), 3m (90 days), 6m (180 days), or all (365 days).
+    Includes monthly view breakdown, growth score, breakout indicators, and winning videos.
+    """
+    return db.get_trending_creators_growth(
+        keyword=keyword,
+        timeframe=timeframe,
+        min_videos=min_videos,
+        sort_by=sort_by,
+        limit=limit
+    )
+
+
 @app.get("/api/creators")
 def get_creators_endpoint(keyword: Optional[str] = None):
     """Retrieve creators with analytics, tier classification, and booking status."""

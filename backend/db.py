@@ -1,7 +1,9 @@
 import sqlite3
 import json
+import math
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Optional, List, Dict, Any
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DB_PATH = BASE_DIR / "data" / "tiktok.db"
@@ -1678,6 +1680,280 @@ def get_creators_with_analytics(keyword: Optional[str] = None):
         })
         
     return results
+
+
+def get_trending_creators_growth(
+    keyword: Optional[str] = None,
+    timeframe: str = "3m",
+    min_videos: int = 1,
+    sort_by: str = "growth_score",
+    limit: int = 50
+) -> Dict[str, Any]:
+    """
+    Analyzes Creator Channel Growth & Trending Velocity across timeframes (1m, 3m, 6m, all).
+    Calculates:
+    - Recent views vs Previous period views (same duration)
+    - Growth Rate % (tốc độ tăng trưởng)
+    - Breakout detection (kênh mới bùng nổ)
+    - Monthly view progression (biểu đồ đánh giá view từng tháng)
+    - Top winning videos/content for each creator in that timeframe
+    - Aggregate monthly trend for the entire niche
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # 1. Determine Anchor Date from latest scraped video in database
+    if keyword:
+        cursor.execute("SELECT MAX(upload_date) FROM videos WHERE keyword = ? AND upload_date IS NOT NULL", (keyword,))
+    else:
+        cursor.execute("SELECT MAX(upload_date) FROM videos WHERE upload_date IS NOT NULL")
+    
+    row = cursor.fetchone()
+    latest_upload = row[0] if row and row[0] else None
+    
+    if latest_upload:
+        try:
+            anchor_dt = datetime.strptime(latest_upload, "%Y-%m-%d")
+        except ValueError:
+            anchor_dt = datetime.now()
+    else:
+        anchor_dt = datetime.now()
+        
+    days_map = {
+        "1m": 30,
+        "3m": 90,
+        "6m": 180,
+        "all": 365
+    }
+    days = days_map.get(timeframe.lower(), 90)
+    
+    recent_start_dt = anchor_dt - timedelta(days=days)
+    prev_start_dt = recent_start_dt - timedelta(days=days)
+    
+    recent_start = recent_start_dt.strftime("%Y-%m-%d")
+    prev_start = prev_start_dt.strftime("%Y-%m-%d")
+    anchor_str = anchor_dt.strftime("%Y-%m-%d")
+    
+    # 2. Query aggregate monthly trend for the entire niche
+    agg_sql = """
+        SELECT 
+            strftime('%Y-%m', upload_date) as month,
+            SUM(views) as total_views,
+            COUNT(*) as total_videos,
+            COUNT(DISTINCT creator) as active_creators
+        FROM videos
+        WHERE upload_date IS NOT NULL AND upload_date >= ? AND upload_date <= ?
+    """
+    agg_params = [prev_start, anchor_str]
+    if keyword:
+        agg_sql += " AND keyword = ?"
+        agg_params.append(keyword)
+    agg_sql += " GROUP BY month ORDER BY month ASC"
+    
+    cursor.execute(agg_sql, tuple(agg_params))
+    aggregate_monthly = [dict(r) for r in cursor.fetchall()]
+    
+    # 3. Query creator stats comparing recent period vs previous period
+    creator_sql = """
+        SELECT 
+            v.creator,
+            COUNT(CASE WHEN v.upload_date >= ? AND v.upload_date <= ? THEN 1 END) as recent_videos,
+            SUM(CASE WHEN v.upload_date >= ? AND v.upload_date <= ? THEN v.views ELSE 0 END) as recent_views,
+            MAX(CASE WHEN v.upload_date >= ? AND v.upload_date <= ? THEN v.views ELSE 0 END) as recent_max_views,
+            ROUND(AVG(CASE WHEN v.upload_date >= ? AND v.upload_date <= ? THEN v.views ELSE NULL END)) as recent_avg_views,
+            COUNT(CASE WHEN v.upload_date >= ? AND v.upload_date < ? THEN 1 END) as prev_videos,
+            SUM(CASE WHEN v.upload_date >= ? AND v.upload_date < ? THEN v.views ELSE 0 END) as prev_views,
+            MAX(CASE WHEN v.upload_date >= ? AND v.upload_date < ? THEN v.views ELSE 0 END) as prev_max_views
+        FROM videos v
+        WHERE v.upload_date >= ? AND v.upload_date <= ?
+    """
+    creator_params = [
+        recent_start, anchor_str,
+        recent_start, anchor_str,
+        recent_start, anchor_str,
+        recent_start, anchor_str,
+        prev_start, recent_start,
+        prev_start, recent_start,
+        prev_start, recent_start,
+        prev_start, anchor_str
+    ]
+    if keyword:
+        creator_sql += " AND v.keyword = ?"
+        creator_params.append(keyword)
+        
+    creator_sql += """
+        GROUP BY v.creator
+        HAVING recent_videos >= ?
+    """
+    creator_params.append(min_videos)
+    
+    cursor.execute(creator_sql, tuple(creator_params))
+    creator_rows = [dict(r) for r in cursor.fetchall()]
+    
+    # 4. Fetch creator metadata (profile, followers, booking status)
+    cursor.execute("SELECT * FROM creators")
+    creators_meta = {r["creator"]: dict(r) for r in cursor.fetchall()}
+    
+    # 5. Fetch winning videos in the recent timeframe for all matching creators
+    vids_sql = """
+        SELECT video_id, creator, views, likes, comments, saves, score, caption, url, upload_date, sound_type
+        FROM videos
+        WHERE upload_date >= ? AND upload_date <= ?
+    """
+    vids_params = [recent_start, anchor_str]
+    if keyword:
+        vids_sql += " AND keyword = ?"
+        vids_params.append(keyword)
+    vids_sql += " ORDER BY views DESC"
+    
+    cursor.execute(vids_sql, tuple(vids_params))
+    recent_videos = cursor.fetchall()
+    
+    winning_vids_map = {}
+    for v in recent_videos:
+        c_name = v["creator"]
+        if c_name not in winning_vids_map:
+            winning_vids_map[c_name] = []
+        if len(winning_vids_map[c_name]) < 3:
+            winning_vids_map[c_name].append(dict(v))
+            
+    # 6. Fetch monthly breakdowns per creator
+    active_creator_names = [r["creator"] for r in creator_rows]
+    monthly_by_creator = {}
+    if active_creator_names:
+        placeholders = ",".join("?" * len(active_creator_names))
+        m_sql = f"""
+            SELECT 
+                creator,
+                strftime('%Y-%m', upload_date) as month,
+                SUM(views) as views,
+                COUNT(*) as videos,
+                ROUND(AVG(views)) as avg_views
+            FROM videos
+            WHERE creator IN ({placeholders}) AND upload_date IS NOT NULL
+            GROUP BY creator, month
+            ORDER BY month ASC
+        """
+        cursor.execute(m_sql, tuple(active_creator_names))
+        for mr in cursor.fetchall():
+            c_name = mr["creator"]
+            if c_name not in monthly_by_creator:
+                monthly_by_creator[c_name] = []
+            monthly_by_creator[c_name].append({
+                "month": mr["month"],
+                "views": int(mr["views"] or 0),
+                "videos": int(mr["videos"] or 0),
+                "avg_views": int(mr["avg_views"] or 0)
+            })
+            
+    conn.close()
+    
+    # 7. Process metrics & calculate Growth Scores
+    creators_result = []
+    for row in creator_rows:
+        c_name = row["creator"]
+        meta = creators_meta.get(c_name, {})
+        follower_count = int(meta.get("follower_count") or 0)
+        
+        recent_views = int(row["recent_views"] or 0)
+        prev_views = int(row["prev_views"] or 0)
+        recent_videos_count = int(row["recent_videos"] or 0)
+        recent_max_views = int(row["recent_max_views"] or 0)
+        recent_avg_views = int(row["recent_avg_views"] or 0)
+        
+        # Growth Rate calculation
+        is_breakout = (prev_views == 0 and recent_views > 0)
+        if prev_views > 0:
+            growth_rate_pct = round(((recent_views - prev_views) / prev_views) * 100.0, 1)
+        elif is_breakout:
+            growth_rate_pct = 100.0
+        else:
+            growth_rate_pct = 0.0
+            
+        # Viral multiplier (Views to Followers leverage)
+        viral_mult = round(recent_max_views / max(follower_count, 100), 1)
+        
+        # Status & Trend Label
+        if is_breakout:
+            trend_status = "surging"
+            trend_label = "🚀 Bùng Nổ Mới"
+            trend_color = "emerald"
+        elif growth_rate_pct >= 100.0:
+            trend_status = "surging"
+            trend_label = f"🚀 Bùng Nổ (+{growth_rate_pct:.0f}%)"
+            trend_color = "emerald"
+        elif growth_rate_pct >= 20.0:
+            trend_status = "growing"
+            trend_label = f"📈 Tăng Trưởng (+{growth_rate_pct:.0f}%)"
+            trend_color = "teal"
+        elif growth_rate_pct >= -15.0:
+            trend_status = "stable"
+            trend_label = "⚖️ Ổn Định"
+            trend_color = "slate"
+        else:
+            trend_status = "cooling"
+            trend_label = f"📉 Giảm ({growth_rate_pct:.0f}%)"
+            trend_color = "rose"
+            
+        # Growth Score calculation (0 - 100)
+        vol_score = min(40.0, math.log10(max(recent_views, 10)) * 6.5)
+        vel_score = 30.0 if is_breakout else min(35.0, max(0.0, growth_rate_pct * 0.15))
+        con_score = min(15.0, recent_videos_count * 3.0)
+        mul_score = min(10.0, viral_mult * 0.5)
+        growth_score = round(min(100.0, vol_score + vel_score + con_score + mul_score), 1)
+        
+        creators_result.append({
+            "creator": c_name,
+            "nickname": meta.get("nickname") or c_name,
+            "avatar_url": meta.get("avatar_url") or "",
+            "follower_count": follower_count,
+            "video_count": int(meta.get("video_count") or 0),
+            "heart_count": int(meta.get("heart_count") or 0),
+            "signature": meta.get("signature") or "",
+            "email": meta.get("email") or "",
+            "verified": bool(meta.get("verified") or 0),
+            "booking_status": meta.get("booking_status") or "new",
+            "booking_notes": meta.get("booking_notes") or "",
+            "booking_price": float(meta.get("booking_price") or 0.0),
+            "growth_score": growth_score,
+            "trend_status": trend_status,
+            "trend_label": trend_label,
+            "trend_color": trend_color,
+            "recent_videos": recent_videos_count,
+            "recent_views": recent_views,
+            "recent_avg_views": recent_avg_views,
+            "recent_max_views": recent_max_views,
+            "prev_videos": int(row["prev_videos"] or 0),
+            "prev_views": prev_views,
+            "growth_rate_pct": growth_rate_pct,
+            "is_breakout": is_breakout,
+            "viral_multiplier": viral_mult,
+            "monthly_breakdown": monthly_by_creator.get(c_name, []),
+            "winning_videos": winning_vids_map.get(c_name, []),
+            "profile_url": f"https://www.tiktok.com/@{c_name}"
+        })
+        
+    # Sort results
+    if sort_by == "recent_views":
+        creators_result.sort(key=lambda x: x["recent_views"], reverse=True)
+    elif sort_by == "growth_rate_pct":
+        creators_result.sort(key=lambda x: x["growth_rate_pct"], reverse=True)
+    elif sort_by == "viral_multiplier":
+        creators_result.sort(key=lambda x: x["viral_multiplier"], reverse=True)
+    else:  # growth_score
+        creators_result.sort(key=lambda x: x["growth_score"], reverse=True)
+        
+    return {
+        "status": "success",
+        "keyword": keyword,
+        "timeframe": timeframe,
+        "anchor_date": anchor_str,
+        "recent_period": f"{recent_start} -> {anchor_str}",
+        "prev_period": f"{prev_start} -> {recent_start}",
+        "total_creators": len(creators_result),
+        "aggregate_monthly": aggregate_monthly,
+        "creators": creators_result[:limit]
+    }
 
 
 def get_niche_audio_summary(keyword: str) -> dict:

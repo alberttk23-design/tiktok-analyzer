@@ -3,7 +3,6 @@ import {
   Sparkles,
   Search,
   Play,
-  Lightbulb,
   FileText,
   Database,
   ExternalLink,
@@ -55,6 +54,7 @@ import {
   Globe,
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
+import { TrendingGrowthTab } from "./components/TrendingGrowthTab";
 
 interface NicheFolder {
   id?: number;
@@ -367,7 +367,7 @@ function App() {
   const [patterns, setPatterns] = useState<MacroPatterns | null>(null);
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "ads" | "database" | "koc" | "sounds" | "voc_seo">("reviews");
+  const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "ads" | "database" | "koc" | "trending" | "sounds" | "voc_seo">("reviews");
 
   // Creative Center Ads states
   const [adsList, setAdsList] = useState<CreativeAd[]>([]);
@@ -2257,18 +2257,6 @@ ${data.master_analysis.summary}\n`;
           </button>
 
           <button
-            onClick={() => setActiveTab("ideas")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "ideas"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <Lightbulb size={16} />
-            <span>Ý Tưởng Sáng Tạo ({data?.ideas?.length || 0})</span>
-          </button>
-
-          <button
             onClick={() => {
               setActiveTab("ads");
               if (adsList.length === 0) loadAdsData();
@@ -2305,6 +2293,18 @@ ${data.master_analysis.summary}\n`;
           >
             <Users size={16} />
             <span>🎯 Booking & KOC Discovery ({creatorsList.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("trending")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
+              activeTab === "trending"
+                ? "bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/25 font-bold"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <TrendingUp size={16} className={activeTab === "trending" ? "text-emerald-200 animate-pulse" : "text-emerald-400"} />
+            <span>📈 Trending & Tăng Trưởng</span>
           </button>
 
           <button
@@ -4045,51 +4045,20 @@ ${data.master_analysis.summary}\n`;
           </div>
         )}
 
-        {/* TAB 3: CREATIVE CONCEPTS */}
-        {activeTab === "ideas" && (
-          <div>
-            <h2 className="text-xl font-bold mb-6 text-white flex items-center gap-2">
-              <Lightbulb className="text-violet-400" size={22} />
-              Ý Tưởng Concept Được Tổng Hợp Từ Dữ Liệu Thị Trường & Comments
-            </h2>
-
-            {(!data?.ideas || data.ideas.length === 0) ? (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
-                <Lightbulb size={40} className="mx-auto mb-3 text-slate-600" />
-                <p>Chưa có ý tưởng nào được sinh ra cho từ khóa này.</p>
-              </div>
-            ) : (
-              <div className="grid md:grid-cols-3 gap-5">
-                {data.ideas.map((concept, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setSelectedConcept(concept)}
-                    className="bg-slate-900/80 border border-slate-800/90 rounded-3xl p-6 shadow-xl hover:border-violet-500/60 hover:-translate-y-1 transition cursor-pointer flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-violet-400 font-semibold mb-3">
-                        <span>Concept #{idx + 1}</span>
-                        <span className="bg-violet-950/80 border border-violet-800/60 px-2.5 py-0.5 rounded-full">
-                          {concept.angle || "Ecom Angle"}
-                        </span>
-                      </div>
-                      <h3 className="text-lg font-bold text-white mb-3">{concept.title}</h3>
-                      <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800/60 text-xs text-slate-300 italic mb-4">
-                        &ldquo;{concept.hook}&rdquo;
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-                      <span>{concept.shot_list?.length || 4} Cảnh Quay (Shots)</span>
-                      <span className="text-violet-400 font-medium flex items-center gap-1">
-                        Xem Shot List <ChevronRight size={14} />
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+        {/* TAB: CHANNEL TRENDING & GROWTH VELOCITY */}
+        {activeTab === "trending" && (
+          <TrendingGrowthTab
+            keyword={keyword}
+            onNavigateToBookingCRM={(creatorName) => {
+              setActiveTab("koc");
+              setKocSearchQuery(creatorName);
+              setKocTierFilter("all");
+              setKocBookingFilter("all");
+            }}
+            onUpdateCreatorBooking={async (creator, status, price, notes) => {
+              await handleUpdateBooking(creator, status, notes, price);
+            }}
+          />
         )}
 
         {/* TAB 4: CREATIVE CENTER ADS (Top Auction Ads Intelligence) */}
