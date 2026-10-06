@@ -191,6 +191,12 @@ def get_results(keyword: Optional[str] = Query(None)):
     return db.get_results_by_keyword(keyword)
 
 
+@app.get("/api/videos")
+def get_videos_endpoint(keyword: Optional[str] = Query(None), limit: Optional[int] = Query(None)):
+    """Fetch video records with thumbnail/cover_url and author avatar_url."""
+    return db.get_all_videos(keyword=keyword, limit=limit)
+
+
 @app.post("/api/analyze-master")
 def run_master_analysis_endpoint(req: MasterAnalysisRequest):
     """Run Master AI Analysis via either Gemini (Antigravity) or Ollama (Local M4)."""

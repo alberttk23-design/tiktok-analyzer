@@ -10,7 +10,6 @@ import {
   AlertCircle,
   Loader2,
   TrendingUp,
-  Brain,
   ChevronRight,
   Eye,
   Heart,
@@ -31,7 +30,6 @@ import {
   Mic,
   Camera,
   Film,
-  SlidersHorizontal,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -55,6 +53,8 @@ import {
 } from "lucide-react";
 import { NicheCharts } from "./components/NicheCharts";
 import { TrendingGrowthTab } from "./components/TrendingGrowthTab";
+import { VideoCardsGrid } from "./components/VideoCardsGrid";
+import { ChannelQuickDrawer } from "./components/ChannelQuickDrawer";
 
 interface NicheFolder {
   id?: number;
@@ -368,6 +368,7 @@ function App() {
   const [historyCount, setHistoryCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<"reviews" | "overall" | "patterns" | "ideas" | "ads" | "database" | "koc" | "trending" | "sounds" | "voc_seo">("reviews");
+  const [drawerCreator, setDrawerCreator] = useState<string | null>(null);
 
   // Creative Center Ads states
   const [adsList, setAdsList] = useState<CreativeAd[]>([]);
@@ -413,11 +414,8 @@ function App() {
   const [vocAiClusters, setVocAiClusters] = useState<any>(null);
   const [vocAiClustering, setVocAiClustering] = useState<boolean>(false);
   const [voiceCorpus, setVoiceCorpus] = useState<any>(null);
-  const [visualCorpus, setVisualCorpus] = useState<any>(null);
   const [batchTranscribing, setBatchTranscribing] = useState<boolean>(false);
   const [batchTranscribeJob, setBatchTranscribeJob] = useState<{ jobId: string; progress: number; message: string } | null>(null);
-  const [batchKeyframing, setBatchKeyframing] = useState<boolean>(false);
-  const [batchKeyframeJob, setBatchKeyframeJob] = useState<{ jobId: string; progress: number; message: string } | null>(null);
 
   // Niche Folders states
   const [foldersList, setFoldersList] = useState<NicheFolder[]>([]);
@@ -429,19 +427,6 @@ function App() {
   const [deletingFolderName, setDeletingFolderName] = useState<string | null>(null);
   const [saveToActiveFolder, setSaveToActiveFolder] = useState<boolean>(true);
   const [mergingFolder, setMergingFolder] = useState<boolean>(false);
-
-  // Video-specific comment crawl state
-  const [crawlingCommentVid, setCrawlingCommentVid] = useState<string | null>(null);
-  const [expandedCommentVid, setExpandedCommentVid] = useState<string | null>(null);
-
-  // Multimodal AI states (Whisper Audio & Qwen-VL Vision)
-  const [multimodalModalVid, setMultimodalModalVid] = useState<ReviewItem | null>(null);
-  const [analyzingMultimodalVid, setAnalyzingMultimodalVid] = useState<string | null>(null);
-  const [analyzingTopMultimodal, setAnalyzingTopMultimodal] = useState(false);
-  const [selectedAngleFilter, setSelectedAngleFilter] = useState<string>("all");
-  const [selectedHashtagFilter, setSelectedHashtagFilter] = useState<string>("all");
-  const [showCaptionAnalytics, setShowCaptionAnalytics] = useState<boolean>(true);
-  const [copiedCaptionId, setCopiedCaptionId] = useState<string | null>(null);
 
   // Sorting & Filtering states (Score, Views, Tym/Likes, Lưu/Saves, Comments, Engagement)
   const [sortBy, setSortBy] = useState<"score" | "views" | "likes" | "saves" | "comments" | "engagement">("score");
@@ -730,14 +715,6 @@ function App() {
         }
       } catch (_) {}
 
-      // Load Visual Corpus (Content Types Breakdown)
-      try {
-        const visRes = await fetch(`${API_BASE}/api/visual-corpus?keyword=${encodeURIComponent(kw)}`);
-        if (visRes.ok) {
-          const visJson = await visRes.json();
-          setVisualCorpus(visJson);
-        }
-      } catch (_) {}
 
       // Load Creative Center Ads
       loadAdsData(kw);
@@ -996,42 +973,6 @@ function App() {
     setShowApiKeyModal(false);
   }
 
-  // On-demand crawl 1000 comments for a specific video
-  async function handleCrawlDeepComments(videoId: string) {
-    if (crawlingCommentVid) return;
-    setCrawlingCommentVid(videoId);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/videos/${videoId}/comments`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ max_comments: 1000 }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json.insights && data) {
-          setData({
-            ...data,
-            comment_insights: {
-              ...(data.comment_insights || {}),
-              [videoId]: {
-                video_id: videoId,
-                keyword: keyword,
-                total_crawled: json.total_crawled,
-                ...json.insights,
-              },
-            },
-          });
-          setExpandedCommentVid(videoId);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to crawl 1000 comments:", e);
-    } finally {
-      setCrawlingCommentVid(null);
-    }
-  }
 
   // Batch crawl comments across videos for Master Report
   async function handleBatchCrawlComments(crawlAll: boolean = false) {
@@ -1211,69 +1152,6 @@ function App() {
     }
   }
 
-  // 3. Batch Keyframe Extract & Vision Classification
-  async function handleRunBatchKeyframes() {
-    if (batchKeyframing || !keyword.trim()) return;
-    setBatchKeyframing(true);
-    setBatchKeyframeJob({
-      jobId: "",
-      progress: 5,
-      message: "Đang khởi động trích xuất khung hình và phân loại visual bằng Qwen-VL...",
-    });
-    try {
-      const res = await fetch(`${API_BASE}/api/batch-keyframes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim() }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const jobId = json.job_id;
-        if (!jobId) {
-          setBatchKeyframing(false);
-          setBatchKeyframeJob(null);
-          return;
-        }
-        const poll = setInterval(async () => {
-          try {
-            const jRes = await fetch(`${API_BASE}/api/jobs/${jobId}`);
-            if (jRes.ok) {
-              const j = await jRes.json();
-              if (j) {
-                setBatchKeyframeJob({
-                  jobId: j.job_id || jobId,
-                  progress: typeof j.progress === "number" ? j.progress : 10,
-                  message: j.message || "Đang phân loại visual...",
-                });
-                if (j.status === "completed" || j.status === "failed") {
-                  clearInterval(poll);
-                  await loadData();
-                  const visRes = await fetch(`${API_BASE}/api/visual-corpus?keyword=${encodeURIComponent(keyword.trim())}`);
-                  if (visRes.ok) {
-                    const visJson = await visRes.json();
-                    if (visJson) setVisualCorpus(visJson);
-                  }
-                  setTimeout(() => {
-                    setBatchKeyframing(false);
-                    setBatchKeyframeJob(null);
-                  }, 1500);
-                }
-              }
-            }
-          } catch (err) {
-            console.error("Batch keyframes poll error:", err);
-          }
-        }, 2000);
-      } else {
-        setBatchKeyframing(false);
-        setBatchKeyframeJob(null);
-      }
-    } catch (e) {
-      console.error("Batch keyframes failed:", e);
-      setBatchKeyframing(false);
-      setBatchKeyframeJob(null);
-    }
-  }
 
   // 4. Batch Update Live Metrics (Views, Likes, Comments, Saves)
   async function handleTriggerUpdateMetrics(scope?: "all" | "top50" | "top100" | "top200") {
@@ -1406,114 +1284,6 @@ ${data.master_analysis.summary}\n`;
     setTimeout(() => setCopiedPrompt(false), 3000);
   }
 
-  // On-demand deep multimodal analysis (Whisper + Qwen-VL)
-  async function handleRunMultimodal(videoId: string) {
-    if (analyzingMultimodalVid) return;
-    setAnalyzingMultimodalVid(videoId);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/analyze-multimodal/${videoId}`, {
-        method: "POST",
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        if (json.data && data) {
-          let updatedReviews = [...(data.reviews || [])];
-          const exists = updatedReviews.some((r) => r.video_id === videoId);
-          if (exists) {
-            updatedReviews = updatedReviews.map((r) => {
-              if (r.video_id === videoId) {
-                return {
-                  ...r,
-                  ...json.data,
-                };
-              }
-              return r;
-            });
-          } else {
-            updatedReviews.push({
-              video_id: videoId,
-              ...json.data,
-            });
-          }
-
-          setData({
-            ...data,
-            reviews: updatedReviews,
-          });
-
-          const currentRev = updatedReviews.find((r) => r.video_id === videoId);
-          if (currentRev) {
-            setMultimodalModalVid(currentRev);
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Multimodal analysis error:", e);
-    } finally {
-      setAnalyzingMultimodalVid(null);
-    }
-  }
-
-  // Batch deep multimodal analysis for top N viral videos
-  async function handleRunTopMultimodal(topN = 5) {
-    if (analyzingTopMultimodal || !keyword.trim()) return;
-    setAnalyzingTopMultimodal(true);
-
-    try {
-      const res = await fetch(`${API_BASE}/api/analyze-multimodal-top`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ keyword: keyword.trim(), top_n: topN }),
-      });
-
-      if (res.ok) {
-        const json = await res.json();
-        const jobId = json.job_id;
-        setCurrentJob({
-          job_id: jobId,
-          keyword: keyword,
-          status: "started",
-          progress: 15,
-          message: `Đang bóc băng Whisper & soi góc quay Qwen-VL cho Top ${topN} video viral...`,
-          new_videos_count: 0,
-        });
-
-        if (pollingRef.current) clearInterval(pollingRef.current);
-        pollingRef.current = setInterval(() => pollJob(jobId), 2000);
-      }
-    } catch (e) {
-      console.error("Top multimodal error:", e);
-    } finally {
-      setAnalyzingTopMultimodal(false);
-    }
-  }
-
-  function renderAdAngleBadge(angle?: string) {
-    if (!angle) return null;
-    let badgeColor = "bg-slate-800 text-slate-300 border-slate-700";
-    if (angle.includes("Problem")) {
-      badgeColor = "bg-amber-950/80 text-amber-300 border-amber-700/80";
-    } else if (angle.includes("Us vs Them")) {
-      badgeColor = "bg-purple-950/80 text-purple-300 border-purple-700/80";
-    } else if (angle.includes("Objection")) {
-      badgeColor = "bg-rose-950/80 text-rose-300 border-rose-700/80";
-    } else if (angle.includes("Smart Shopper") || angle.includes("Bargain")) {
-      badgeColor = "bg-blue-950/80 text-blue-300 border-blue-700/80";
-    } else if (angle.includes("ASMR")) {
-      badgeColor = "bg-cyan-950/80 text-cyan-300 border-cyan-700/80";
-    } else if (angle.includes("Transformation")) {
-      badgeColor = "bg-emerald-950/80 text-emerald-300 border-emerald-700/80";
-    }
-
-    return (
-      <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${badgeColor} flex items-center gap-1 shadow-sm`}>
-        <Target size={11} />
-        {angle}
-      </span>
-    );
-  }
 
   function renderSoundBadge(soundType?: string, soundTitle?: string, soundAuthor?: string) {
     const stype = soundType || "unknown";
@@ -2218,44 +1988,61 @@ ${data.master_analysis.summary}\n`;
           </div>
         </div>
 
-        {/* Tab Navigation */}
+        {/* Tab Navigation: 5 Practical Tabs */}
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 mb-6 pb-2">
+          {/* TAB 1: KHÁM PHÁ VIDEO */}
           <button
             onClick={() => setActiveTab("reviews")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
               activeTab === "reviews"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20"
+                ? "bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-lg shadow-indigo-600/25 font-bold"
                 : "text-slate-400 hover:text-white hover:bg-slate-900"
             }`}
           >
-            <Brain size={16} />
-            <span>Phân Tích 4 Trụ Cột & Khán Giả ({data?.reviews?.length || 0})</span>
+            <Film size={16} className={activeTab === "reviews" ? "text-violet-200" : "text-violet-400"} />
+            <span>🎬 Khám Phá Video ({data?.videos?.length || 0})</span>
           </button>
 
+          {/* TAB 2: TRENDING & KÊNH */}
           <button
-            onClick={() => setActiveTab("overall")}
+            onClick={() => setActiveTab("trending")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "overall"
-                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/20"
+              activeTab === "trending"
+                ? "bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/25 font-bold"
                 : "text-slate-400 hover:text-white hover:bg-slate-900"
             }`}
           >
-            <Cpu size={16} />
-            <span>Báo Cáo AI Tổng Thể (Local) {masterAI ? "✓" : ""}</span>
+            <TrendingUp size={16} className={activeTab === "trending" ? "text-emerald-200 animate-pulse" : "text-emerald-400"} />
+            <span>📈 Trending & Kênh</span>
           </button>
 
+          {/* TAB 3: BOOKING & KOC */}
           <button
-            onClick={() => setActiveTab("patterns")}
+            onClick={() => setActiveTab("koc")}
             className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "patterns"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20"
+              activeTab === "koc"
+                ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-orange-500/20 font-bold"
                 : "text-slate-400 hover:text-white hover:bg-slate-900"
             }`}
           >
-            <BarChart3 size={16} />
-            <span>📊 Biểu Đồ & Macro DNA ({data?.videos?.length || 0})</span>
+            <Users size={16} />
+            <span>🎯 Booking & KOC ({creatorsList.length})</span>
           </button>
 
+          {/* TAB 4: BÌNH LUẬN & VOC */}
+          <button
+            onClick={() => setActiveTab("voc_seo")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
+              activeTab === "voc_seo"
+                ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-lg shadow-sky-600/25 font-bold"
+                : "text-slate-400 hover:text-white hover:bg-slate-900"
+            }`}
+          >
+            <MessageSquare size={16} />
+            <span>💬 Bình Luận & VoC</span>
+          </button>
+
+          {/* TAB 5: CREATIVE CENTER ADS */}
           <button
             onClick={() => {
               setActiveTab("ads");
@@ -2269,66 +2056,6 @@ ${data.master_analysis.summary}\n`;
           >
             <Flame size={16} className={activeTab === "ads" ? "text-amber-300 animate-pulse" : "text-rose-500"} />
             <span>🎯 Creative Center Ads ({adsList.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("database")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "database"
-                ? "bg-purple-600 text-white shadow-lg shadow-purple-600/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <Database size={16} />
-            <span>Bảng Dữ Liệu (Kèm Cột AI) ({data?.videos?.length || 0})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("koc")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "koc"
-                ? "bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg shadow-orange-500/20"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <Users size={16} />
-            <span>🎯 Booking & KOC Discovery ({creatorsList.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("trending")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "trending"
-                ? "bg-gradient-to-r from-emerald-500 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/25 font-bold"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <TrendingUp size={16} className={activeTab === "trending" ? "text-emerald-200 animate-pulse" : "text-emerald-400"} />
-            <span>📈 Trending & Tăng Trưởng</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("sounds")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "sounds"
-                ? "bg-gradient-to-r from-pink-600 to-rose-600 text-white shadow-lg shadow-pink-600/20 font-bold"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <Music size={16} />
-            <span>🎵 Âm Thanh & Voice AI</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("voc_seo")}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-xs md:text-sm transition cursor-pointer ${
-              activeTab === "voc_seo"
-                ? "bg-gradient-to-r from-sky-600 to-indigo-600 text-white shadow-lg shadow-sky-600/25 font-bold"
-                : "text-slate-400 hover:text-white hover:bg-slate-900"
-            }`}
-          >
-            <MessageSquare size={16} />
-            <span>💬 Caption SEO & Bình Luận (VoC)</span>
           </button>
         </div>
 
@@ -3129,777 +2856,15 @@ ${data.master_analysis.summary}\n`;
           </div>
         )}
 
-        {/* TAB 1: REVIEWS WITH COMMENTS & 4 PILLARS & MULTIMODAL */}
+        {/* TAB 1: KHÁM PHÁ VIDEO (CARD GRID CHUẨN FASTMOss / CREATIVE ADS) */}
         {activeTab === "reviews" && (
-          <div className="space-y-5">
-            {/* Header & Angle Filter Toolbar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 p-4 rounded-3xl border border-slate-800">
-              <div>
-                <h2 className="text-lg md:text-xl font-bold flex items-center gap-2 text-white">
-                  <Sparkles className="text-pink-400" size={20} />
-                  Creative Intelligence &bull; Tiếng Nói Khách Hàng &bull; Multimodal AI
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Phân loại trường phái DTC &bull; Bóc băng Whisper &bull; Soi góc quay Qwen-VL (100% Cục Bộ M4)
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={handleRunBatchKeyframes}
-                  disabled={batchKeyframing}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-semibold px-3.5 py-2 rounded-xl text-xs flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-                  title="Tự động tải 1 khung hình mở đầu (kf1) của từng video và đưa qua Qwen-VL để phân loại dạng video (unboxing, decor, review...)"
-                >
-                  {batchKeyframing ? (
-                    <Loader2 size={13} className="animate-spin text-pink-400" />
-                  ) : (
-                    <Camera size={13} className="text-pink-400" />
-                  )}
-                  <span>📸 Phân Loại Hình Ảnh Toàn Ngách</span>
-                </button>
-
-                <button
-                  onClick={() => handleRunTopMultimodal(5)}
-                  disabled={analyzingTopMultimodal}
-                  className="bg-gradient-to-r from-violet-600 to-pink-600 hover:from-violet-500 hover:to-pink-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-lg shadow-violet-600/25 transition cursor-pointer disabled:opacity-50"
-                  title="Tự động tải stream, bóc băng và soi 3 khung hình cho Top 5 video viral nhất"
-                >
-                  {analyzingTopMultimodal ? (
-                    <>
-                      <Loader2 size={13} className="animate-spin" />
-                      <span>Đang phân tích Top 5...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap size={13} className="text-yellow-300" />
-                      <span>🚀 Bóc Băng & Soi Góc Quay Top 5 Winners</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Batch Keyframe Progress Banner */}
-            {batchKeyframeJob && (
-              <div className="bg-gradient-to-r from-pink-950/70 via-purple-950/50 to-slate-900 border border-pink-500/50 rounded-2xl p-4 shadow-xl space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-pink-200 flex items-center gap-2">
-                    <Loader2 size={14} className="animate-spin text-pink-400" />
-                    {batchKeyframeJob.message}
-                  </span>
-                  <span className="font-mono font-black text-pink-400 bg-pink-500/10 border border-pink-500/20 px-2 py-0.5 rounded-lg">
-                    {batchKeyframeJob.progress}%
-                  </span>
-                </div>
-                <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-800">
-                  <div
-                    className="bg-gradient-to-r from-pink-500 via-purple-500 to-violet-500 h-1.5 rounded-full transition-all duration-300 shadow-sm shadow-pink-500/50"
-                    style={{ width: `${Math.min(100, Math.max(5, batchKeyframeJob.progress))}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* VISUAL CONTENT TYPES DISTRIBUTION (If classified) */}
-            {visualCorpus?.content_types && visualCorpus.content_types.length > 0 && (
-              <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 md:p-6 shadow-xl space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-800">
-                  <div className="flex items-center gap-2 text-pink-400 text-xs font-bold uppercase tracking-wider">
-                    <Camera size={15} />
-                    <span>Phân Loại Định Dạng Nội Dung Thị Giác ({visualCorpus.total_classified} video đã phân tích)</span>
-                  </div>
-                  <span className="text-[11px] text-slate-400 font-mono">Qwen-VL Vision AI</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-1">
-                  {visualCorpus.content_types.map((ct: any, ctIdx: number) => {
-                    const typeIcons: Record<string, string> = {
-                      "Aesthetic Room Tour": "🏡",
-                      "POV Unboxing": "📦",
-                      "Demonstration": "🛠️",
-                      "Before/After": "✨",
-                      "Selfie Talking Head": "🗣️",
-                      "ASMR Styling": "🌿",
-                      "Product Showcase": "🔍",
-                    };
-                    const icon = typeIcons[ct.type] || "🎬";
-
-                    return (
-                      <div
-                        key={ctIdx}
-                        className="bg-slate-950 p-3 rounded-2xl border border-slate-800 flex flex-col justify-between space-y-2 hover:border-pink-500/40 transition"
-                      >
-                        <div>
-                          <div className="flex items-center justify-between text-xs mb-1">
-                            <span className="text-base">{icon}</span>
-                            <span className="font-mono font-bold text-pink-400 text-xs">{ct.pct}%</span>
-                          </div>
-                          <span className="text-xs font-bold text-white block truncate" title={ct.type}>
-                            {ct.type}
-                          </span>
-                        </div>
-                        <div>
-                          <div className="w-full bg-slate-900 rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className="bg-gradient-to-r from-pink-500 to-purple-600 h-full rounded-full"
-                              style={{ width: `${Math.min(100, Math.max(8, ct.pct))}%` }}
-                            />
-                          </div>
-                          <span className="text-[10px] text-slate-500 font-mono mt-1 block">
-                            {ct.count} video
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Filter Chips by DTC Angle */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              <span className="text-slate-400 flex items-center gap-1 mr-1 text-[11px] font-semibold">
-                <SlidersHorizontal size={12} /> Lọc Trường Phái DTC:
-              </span>
-              {[
-                { id: "all", label: "Tất cả" },
-                { id: "Transformation", label: "✨ Room Transformation" },
-                { id: "Problem", label: "🎯 Problem-Solution (PAS)" },
-                { id: "Objection", label: "🛡️ Objection Buster" },
-                { id: "Smart Shopper", label: "💰 Smart Shopper / Find" },
-                { id: "ASMR", label: "🌿 ASMR / Styling" },
-                { id: "Us vs Them", label: "⚔️ Us vs Them" },
-              ].map((chip) => (
-                <button
-                  key={chip.id}
-                  onClick={() => setSelectedAngleFilter(chip.id)}
-                  className={`px-3 py-1 rounded-full font-medium transition cursor-pointer text-xs ${
-                    selectedAngleFilter === chip.id
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/30 font-bold"
-                      : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
-                  }`}
-                >
-                  {chip.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Sorting & Filter Controls Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-900/60 p-3.5 rounded-2xl border border-slate-800/80 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-slate-400 font-semibold flex items-center gap-1">
-                  <ArrowUpDown size={13} className="text-purple-400" /> Sắp xếp:
-                </span>
-                {[
-                  { id: "score", label: "🏆 Điểm Score" },
-                  { id: "views", label: "👁️ Views" },
-                  { id: "likes", label: "❤️ Tym" },
-                  { id: "saves", label: "📌 Lưu" },
-                  { id: "comments", label: "💬 Cmt" },
-                  { id: "engagement", label: "⚡ Tương tác" },
-                ].map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleToggleSort(s.id as any)}
-                    className={`px-2.5 py-1 rounded-xl transition cursor-pointer flex items-center gap-1 font-medium ${
-                      sortBy === s.id
-                        ? "bg-purple-600 text-white shadow font-bold"
-                        : "bg-slate-950 text-slate-400 hover:text-white border border-slate-800"
-                    }`}
-                  >
-                    <span>{s.label}</span>
-                    {sortBy === s.id && (sortOrder === "desc" ? <ArrowDown size={11} /> : <ArrowUp size={11} />)}
-                  </button>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="relative">
-                  <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Lọc creator / caption..."
-                    value={tableSearch}
-                    onChange={(e) => setTableSearch(e.target.value)}
-                    className="bg-slate-950 border border-slate-800 rounded-xl pl-7 pr-3 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-purple-500 w-44"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* CAPTION & HASHTAG SEO TREND ANALYTICS */}
-            {data?.caption_analytics && data.caption_analytics.top_hashtags?.length > 0 && (
-              <div className="bg-gradient-to-r from-sky-950/40 via-slate-900/90 to-indigo-950/40 border border-sky-800/40 rounded-3xl p-4 md:p-5 shadow-xl">
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowCaptionAnalytics(!showCaptionAnalytics)}>
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-sky-500/20 border border-sky-500/30 flex items-center justify-center text-sky-400">
-                      <Hash size={16} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-sm md:text-base font-bold text-white">Thống Kê Caption & Cặp Hashtag Xu Hướng (SEO TikTok)</h3>
-                        <span className="text-[10px] bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-mono">
-                          {data.caption_analytics.total_videos} video &bull; TB {data.caption_analytics.avg_tags} tags/video
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">Khám phá các hashtag và cụm từ khóa mà các video triệu view hay đăng chung với nhau</p>
-                    </div>
-                  </div>
-                  <button className="text-xs text-sky-400 hover:text-sky-300 font-semibold px-2.5 py-1 bg-sky-950/60 border border-sky-800/60 rounded-xl transition cursor-pointer">
-                    {showCaptionAnalytics ? "Thu gọn ▲" : "Mở rộng ▼"}
-                  </button>
-                </div>
-
-                {showCaptionAnalytics && (
-                  <div className="mt-4 pt-4 border-t border-slate-800/80 space-y-4">
-                    {/* Row 1: Top Hashtags with filter */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-bold text-sky-300 uppercase tracking-wider flex items-center gap-1">
-                          <Tag size={12} /> Top 15 Hashtag Phổ Biến Nhất Ngách (Bấm để lọc):
-                        </span>
-                        {selectedHashtagFilter !== "all" && (
-                          <button
-                            onClick={() => setSelectedHashtagFilter("all")}
-                            className="text-[11px] text-pink-400 hover:underline font-semibold cursor-pointer"
-                          >
-                            ✕ Xóa lọc thẻ (Đang lọc: {selectedHashtagFilter})
-                          </button>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {data.caption_analytics.top_hashtags.map((item, hIdx) => {
-                          const isActive = selectedHashtagFilter.toLowerCase() === item.tag.toLowerCase();
-                          return (
-                            <button
-                              key={hIdx}
-                              onClick={() => setSelectedHashtagFilter(isActive ? "all" : item.tag)}
-                              className={`text-xs px-2.5 py-1 rounded-xl border flex items-center gap-1.5 transition cursor-pointer ${
-                                isActive
-                                  ? "bg-sky-500 text-white border-sky-400 shadow-md shadow-sky-500/30 font-bold"
-                                  : "bg-slate-950/80 text-slate-300 border-slate-800 hover:border-sky-700/80 hover:text-sky-200"
-                              }`}
-                              title={`Lọc danh sách theo ${item.tag}`}
-                            >
-                              <span className="font-semibold">{item.tag}</span>
-                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isActive ? "bg-sky-700 text-white" : "bg-slate-800 text-slate-400"}`}>
-                                {item.count} ({item.percentage}%)
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    {/* Row 2: Top Co-occurring Pairs & Top Phrases */}
-                    <div className="grid md:grid-cols-2 gap-3 pt-1">
-                      {/* Pairs */}
-                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3">
-                        <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <span>🔗 Các Cặp Hashtag Hay Đi Chung Nhất:</span>
-                        </h4>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                          {data.caption_analytics.top_pairs.slice(0, 8).map((p, pIdx) => (
-                            <div key={pIdx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-slate-900/60 border border-slate-800/50">
-                              <span className="font-mono text-indigo-200">{p.pair}</span>
-                              <span className="text-[11px] font-semibold text-slate-400">{p.count} video ({p.percentage}%)</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Phrases */}
-                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-2xl p-3">
-                        <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider mb-2 flex items-center gap-1">
-                          <span>💡 Cụm Từ Khóa SEO Phổ Biến Trong Caption:</span>
-                        </h4>
-                        <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                          {data.caption_analytics.top_phrases.slice(0, 8).map((phr, phrIdx) => (
-                            <div key={phrIdx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-xl bg-slate-900/60 border border-slate-800/50">
-                              <span className="text-slate-200 capitalize font-medium">&ldquo;{phr.phrase}&rdquo;</span>
-                              <span className="text-[11px] font-semibold text-slate-400">{phr.count} lần</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {(!data?.videos || data.videos.length === 0) ? (
-              <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center text-slate-400">
-                <Brain size={40} className="mx-auto mb-3 text-slate-600" />
-                <p>Chưa có dữ liệu video cho từ khóa này.</p>
-                <p className="text-xs text-slate-500 mt-1">Nhập từ khóa và nhấn "Cào Tiếp 20 Video Mới".</p>
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {sortedFilteredVideos
-                  .filter((vid) => {
-                    if (selectedAngleFilter !== "all") {
-                      const r = reviewMap.get(vid.video_id);
-                      const ang = r?.ad_angle || "";
-                      if (!ang.toLowerCase().includes(selectedAngleFilter.toLowerCase())) return false;
-                    }
-                    if (selectedHashtagFilter !== "all") {
-                      const cap = (vid.caption || "").toLowerCase();
-                      if (!cap.includes(selectedHashtagFilter.toLowerCase())) return false;
-                    }
-                    return true;
-                  })
-                  .map((vid, idx) => {
-                  const rev = reviewMap.get(vid.video_id);
-                  const ins = insightsMap[vid.video_id];
-                  const isExpanded = expandedCommentVid === vid.video_id;
-                  const isCrawlingDeep = crawlingCommentVid === vid.video_id;
-
-                  return (
-                    <div
-                      key={vid.video_id || idx}
-                      className="bg-slate-900/80 border border-slate-800/90 rounded-3xl p-5 md:p-6 shadow-xl hover:border-slate-700 transition"
-                    >
-                      {/* Video Header & Metrics */}
-                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3.5 border-b border-slate-800">
-                        <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-purple-400">
-                            #{idx + 1}
-                          </span>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-white">@{vid.creator || "unknown"}</span>
-                              {creatorMap.get(vid.creator)?.viral_multiplier ? (
-                                <span className="text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded-full border border-amber-500/40 font-bold flex items-center gap-0.5">
-                                  <Zap size={9} /> x{creatorMap.get(vid.creator)!.viral_multiplier}
-                                </span>
-                              ) : null}
-                              {creatorMap.get(vid.creator)?.follower_count ? (
-                                <span className="text-[10px] bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded-full border border-emerald-800/60 font-mono">
-                                  {creatorMap.get(vid.creator)!.follower_count.toLocaleString()} flw
-                                </span>
-                              ) : vid.creator_followers && vid.creator_followers > 0 ? (
-                                <span className="text-[10px] bg-slate-800 text-purple-300 px-1.5 py-0.5 rounded-full border border-purple-800/60 font-mono">
-                                  {vid.creator_followers.toLocaleString()} flw
-                                </span>
-                              ) : null}
-                              <a
-                                href={vid.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-slate-400 hover:text-pink-400 transition"
-                              >
-                                <ExternalLink size={13} />
-                              </a>
-                              <span className="text-[11px] text-slate-500">({vid.upload_date || "gần đây"})</span>
-                            </div>
-                            <p className="text-xs text-slate-400 line-clamp-1 max-w-xl mt-0.5">
-                              {vid.caption || "Không có mô tả"}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Badges: Views, Likes, Saves, Comments, Score */}
-                        <div className="flex flex-wrap items-center gap-2 text-xs">
-                          <div className="bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 flex items-center gap-1.5 text-slate-300">
-                            <Eye size={12} className="text-blue-400" />
-                            <span>{(vid.views || 0).toLocaleString()} views</span>
-                          </div>
-                          <div className="bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 flex items-center gap-1.5 text-slate-300">
-                            <Heart size={12} className="text-pink-400" />
-                            <span>{(vid.likes || 0).toLocaleString()} tym</span>
-                          </div>
-                          <div className="bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 flex items-center gap-1.5 text-slate-300">
-                            <Bookmark size={12} className="text-amber-400" />
-                            <span>{(vid.saves || 0).toLocaleString()} lưu</span>
-                          </div>
-                          <div className="bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 flex items-center gap-1.5 text-slate-300">
-                            <MessageCircle size={12} className="text-emerald-400" />
-                            <span>{(vid.comments || 0).toLocaleString()} cmt</span>
-                          </div>
-                          <div className="bg-purple-950/60 border border-purple-800/80 px-2.5 py-1 rounded-xl flex items-center gap-1 text-purple-300 font-bold">
-                            <TrendingUp size={12} />
-                            <span>Score: {vid.score || 75}</span>
-                          </div>
-                          {renderAdAngleBadge(rev?.ad_angle)}
-                          {renderSoundBadge(vid.sound_type, vid.sound_title, vid.sound_author)}
-                        </div>
-                      </div>
-
-                      {/* 4 Pillars Grid */}
-                      <div className="grid md:grid-cols-2 gap-3.5 mt-4">
-                        {/* 1. Caption & SEO Tags */}
-                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-1.5 text-[11px] font-bold text-sky-400 uppercase tracking-wider">
-                                <span>📝 Caption & Hashtags Bài Đăng</span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  if (vid.caption) {
-                                    navigator.clipboard.writeText(vid.caption);
-                                    setCopiedCaptionId(vid.video_id);
-                                    setTimeout(() => setCopiedCaptionId(null), 2000);
-                                  }
-                                }}
-                                className="text-[10px] text-slate-400 hover:text-sky-300 flex items-center gap-1 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded cursor-pointer transition"
-                                title="Sao chép toàn bộ caption"
-                              >
-                                {copiedCaptionId === vid.video_id ? (
-                                  <>
-                                    <Check size={10} className="text-emerald-400" />
-                                    <span className="text-emerald-400 font-semibold">Đã copy</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Copy size={10} />
-                                    <span>Copy</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-
-                            {/* Clean Caption Text & Hashtags */}
-                            {(() => {
-                              const fullCaption = vid.caption || "";
-                              const rawTags = (fullCaption.match(/#[a-zA-Z0-9_\-]+/g) || []);
-                              const cleanText = fullCaption.replace(/#[a-zA-Z0-9_\-]+/g, "").replace(/https?:\/\/\S+/g, "").trim();
-
-                              return (
-                                <div className="space-y-2">
-                                  {cleanText ? (
-                                    <p className="text-xs md:text-sm text-slate-200 leading-relaxed font-normal">
-                                      &ldquo;{cleanText}&rdquo;
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs text-slate-500 italic">
-                                      Video này creator không viết lời mô tả, chỉ gắn thẻ hashtags.
-                                    </p>
-                                  )}
-
-                                  {/* Hashtag Badges */}
-                                  {rawTags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 pt-1">
-                                      {rawTags.map((tag, tIdx) => (
-                                        <span
-                                          key={tIdx}
-                                          onClick={() => setSelectedHashtagFilter(tag)}
-                                          className="text-[10px] bg-sky-950/60 border border-sky-800/60 text-sky-300 px-1.5 py-0.5 rounded-md hover:bg-sky-900/80 cursor-pointer transition font-mono"
-                                          title={`Bấm để lọc các video có thẻ ${tag}`}
-                                        >
-                                          {tag}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-
-                          <div className="mt-2.5 pt-2 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500">
-                            <span>{(vid.caption || "").length} ký tự</span>
-                            <span>{((vid.caption || "").match(/#[a-zA-Z0-9_\-]+/g) || []).length} thẻ hashtags</span>
-                          </div>
-                        </div>
-
-                        {/* 2. Viral Mechanics */}
-                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-1.5">
-                            <span>🚀 Động Lực Viral & Tương Tác</span>
-                          </div>
-                          <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                            {rev?.viral || `Đạt ${(vid.views || 0).toLocaleString()} views và ${(vid.saves || 0).toLocaleString()} lượt lưu nhờ tính thẩm mỹ và giá trị tham khảo cao.`}
-                          </p>
-                        </div>
-
-                        {/* 3. Buyer Psychology */}
-                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-1.5 text-[11px] font-bold text-violet-400 uppercase tracking-wider">
-                              <span>🧠 Tâm Lý Người Mua (Buyer Psychology)</span>
-                            </div>
-                            {ins && ins.total_crawled > 0 ? (
-                              <span className="text-[10px] bg-violet-950/80 border border-violet-700/60 text-violet-300 px-1.5 py-0.5 rounded font-mono font-bold">
-                                {ins.total_crawled} cmt thật
-                              </span>
-                            ) : (
-                              <span className="text-[10px] bg-slate-900 border border-slate-800 text-slate-500 px-1.5 py-0.5 rounded">
-                                AI Ngách
-                              </span>
-                            )}
-                          </div>
-
-                          {ins && ins.total_crawled > 0 ? (
-                            <div className="space-y-2">
-                              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                                <span className="bg-emerald-950/80 border border-emerald-800/70 text-emerald-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
-                                  🛒 {Math.round(((ins.buying_intent?.length || 0) / ins.total_crawled) * 100)}% Hỏi mua/xin link ({ins.buying_intent?.length || 0})
-                                </span>
-                                <span className="bg-amber-950/80 border border-amber-800/70 text-amber-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
-                                  ⚠️ {Math.round(((ins.objections?.length || 0) / ins.total_crawled) * 100)}% Rào cản/lo ngại ({ins.objections?.length || 0})
-                                </span>
-                                {ins.top_faqs && ins.top_faqs.length > 0 && (
-                                  <span className="bg-sky-950/80 border border-sky-800/70 text-sky-300 px-2 py-0.5 rounded-lg font-semibold flex items-center gap-1">
-                                    ❓ {ins.top_faqs.length} FAQ
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                                {ins.summary || rev?.buyer_psychology || "Đánh trúng nhu cầu thẩm mỹ và giải tỏa nỗi lo thực tế của khách hàng."}
-                              </p>
-                              {ins.buying_intent && ins.buying_intent.length > 0 && (
-                                <p className="text-[11px] text-emerald-300/90 italic bg-emerald-950/30 border border-emerald-900/40 p-2 rounded-xl">
-                                  💬 Khách hỏi mua: &ldquo;{ins.buying_intent[0].text}&rdquo;
-                                </p>
-                              )}
-                              {ins.objections && ins.objections.length > 0 && (
-                                <p className="text-[11px] text-amber-300/90 italic bg-amber-950/30 border border-amber-900/40 p-2 rounded-xl">
-                                  💬 Khách thắc mắc: &ldquo;{ins.objections[0].text}&rdquo;
-                                </p>
-                              )}
-                            </div>
-                          ) : (
-                            <div>
-                              <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                                {rev?.buyer_psychology || "Đánh trúng khao khát nâng cấp không gian sống, giải tỏa nỗi sợ tốn công chăm sóc và chứng minh sự hợp lý về giá cả."}
-                              </p>
-                              <div className="mt-2 pt-1.5 border-t border-slate-900 flex items-center justify-between text-[10px] text-slate-500">
-                                <span>Chưa cào dữ liệu bình luận riêng</span>
-                                <button
-                                  onClick={() => handleCrawlDeepComments(vid.video_id)}
-                                  disabled={crawlingCommentVid === vid.video_id}
-                                  className="text-purple-400 hover:text-purple-300 font-semibold cursor-pointer transition flex items-center gap-1"
-                                >
-                                  <Zap size={10} /> Cào cmt đo % ngay
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* 4. Winning Formula */}
-                        <div className="bg-slate-950/70 border border-slate-800/70 rounded-2xl p-3.5">
-                          <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5">
-                            <span>🏆 Công Thức Thắng (Winning Formula)</span>
-                          </div>
-                          <p className="text-xs md:text-sm text-slate-200 leading-relaxed">
-                            {rev?.winning_formula || "3s tò mò mở đầu -> cận cảnh kiểm tra độ chân thực -> toàn cảnh không gian -> kêu gọi nhấp link giỏ hàng/bio."}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* MULTIMODAL INTELLIGENCE 360 (Whisper Audio + Qwen-VL Vision) */}
-                      {rev?.spoken_hook || rev?.visual_hook || (rev?.keyframes && rev.keyframes.length > 0) ? (
-                        <div className="mt-4 p-4 rounded-2xl bg-gradient-to-r from-violet-950/40 via-slate-950 to-pink-950/30 border border-violet-800/40">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-slate-800/80">
-                            <div className="flex items-center gap-2">
-                              <span className="bg-pink-500/20 text-pink-300 border border-pink-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
-                                <Mic size={11} /> Whisper Audio
-                              </span>
-                              <span className="bg-violet-500/20 text-violet-300 border border-violet-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1">
-                                <Camera size={11} /> Qwen-VL Vision
-                              </span>
-                              <span className="text-xs font-bold text-slate-200">Multimodal Intelligence (100% M4)</span>
-                            </div>
-                            <button
-                              onClick={() => setMultimodalModalVid(rev)}
-                              className="text-xs text-pink-400 hover:text-pink-300 font-semibold flex items-center gap-1 cursor-pointer transition"
-                            >
-                              <span>Xem toàn văn lời thoại & 3 khung hình</span>
-                              <ChevronRight size={13} />
-                            </button>
-                          </div>
-
-                          <div className="grid md:grid-cols-12 gap-3 items-center">
-                            {rev?.keyframes && rev.keyframes.length > 0 && (
-                              <div className="md:col-span-4 flex items-center gap-2">
-                                {rev.keyframes.slice(0, 3).map((kf, kfIdx) => (
-                                  <img
-                                    key={kfIdx}
-                                    src={`${API_BASE}${kf}`}
-                                    alt={`Keyframe ${kfIdx + 1}`}
-                                    className="w-20 h-24 object-cover rounded-xl border border-slate-700 hover:scale-105 transition cursor-pointer shadow-md"
-                                    onClick={() => setMultimodalModalVid(rev)}
-                                    title="Bấm để phóng to và xem phân tích"
-                                  />
-                                ))}
-                              </div>
-                            )}
-
-                            <div className={rev?.keyframes && rev.keyframes.length > 0 ? "md:col-span-8 space-y-2" : "md:col-span-12 space-y-2"}>
-                              {(vid.sound_title || vid.sound_type) && (
-                                <p className="text-xs text-slate-300 flex items-center gap-1.5 flex-wrap">
-                                  <strong className="text-pink-400 font-semibold flex items-center gap-1">
-                                    <Music size={11} /> Nhạc / Âm thanh:
-                                  </strong>
-                                  {renderSoundBadge(vid.sound_type)}
-                                  {vid.sound_title && (
-                                    <span className="text-slate-200 font-medium">"{vid.sound_title}"</span>
-                                  )}
-                                  {vid.sound_author && (
-                                    <span className="text-slate-500 text-[11px]">bởi @{vid.sound_author}</span>
-                                  )}
-                                </p>
-                              )}
-                              {rev?.spoken_hook && (
-                                <p className="text-xs text-slate-300">
-                                  <strong className="text-pink-400 font-semibold">🎙️ Lời thoại mở đầu (0-3s): </strong>
-                                  <span className="italic text-slate-100">&ldquo;{rev.spoken_hook}&rdquo;</span>
-                                </p>
-                              )}
-                              {rev?.visual_hook && (
-                                <p className="text-xs text-slate-300">
-                                  <strong className="text-violet-400 font-semibold">👁️ Hook thị giác: </strong>
-                                  <span className="text-slate-200">{rev.visual_hook}</span>
-                                </p>
-                              )}
-                              {rev?.on_screen_text && rev.on_screen_text !== "None" && rev.on_screen_text !== "Không có" && (
-                                <p className="text-xs text-slate-400">
-                                  <strong className="text-amber-400 font-semibold">🔤 Chữ trên màn hình: </strong>
-                                  <span className="font-mono text-slate-200">{rev.on_screen_text}</span>
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="mt-4 flex items-center justify-between p-3.5 rounded-2xl bg-slate-950/60 border border-slate-800/80">
-                          <div className="flex items-center gap-2 text-xs text-slate-400">
-                            <Film size={14} className="text-purple-400" />
-                            <span>Chưa bóc băng lời nói KOC & soi góc quay thị giác cho video này.</span>
-                          </div>
-                          <button
-                            onClick={() => handleRunMultimodal(vid.video_id)}
-                            disabled={analyzingMultimodalVid === vid.video_id}
-                            className="bg-gradient-to-r from-pink-600 to-violet-600 hover:from-pink-500 hover:to-violet-500 text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center gap-1.5 shadow-lg shadow-pink-600/20 transition cursor-pointer disabled:opacity-50"
-                          >
-                            {analyzingMultimodalVid === vid.video_id ? (
-                              <>
-                                <Loader2 size={12} className="animate-spin text-white" />
-                                <span>Đang bóc băng Whisper & Qwen-VL...</span>
-                              </>
-                            ) : (
-                              <>
-                                <Zap size={12} className="text-yellow-300" />
-                                <span>⚡ Bóc Băng & Soi Góc Quay</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      )}
-
-                      {/* VOICE OF CUSTOMER / COMMENTS ACCORDION */}
-                      <div className="mt-4 pt-3.5 border-t border-slate-800/70">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                              <MessageSquare size={14} className="text-pink-400" />
-                              <span>Tiếng Nói Khách Hàng (Comments):</span>
-                            </span>
-
-                            {ins && ins.total_crawled > 0 ? (
-                              <div className="flex items-center gap-1.5 text-[11px]">
-                                <span className="bg-blue-950/70 border border-blue-800/60 text-blue-300 px-2 py-0.5 rounded-lg">
-                                  {ins.total_crawled} cmt đã lọc
-                                </span>
-                                {ins.buying_intent?.length > 0 && (
-                                  <span className="bg-emerald-950/70 border border-emerald-800/60 text-emerald-300 px-2 py-0.5 rounded-lg">
-                                    {ins.buying_intent.length} hỏi mua/xin link
-                                  </span>
-                                )}
-                                {ins.objections?.length > 0 && (
-                                  <span className="bg-amber-950/70 border border-amber-800/60 text-amber-300 px-2 py-0.5 rounded-lg">
-                                    {ins.objections.length} rào cản/thắc mắc
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-[11px] text-slate-500">Chưa cào comments sâu</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleCrawlDeepComments(vid.video_id)}
-                              disabled={isCrawlingDeep}
-                              className="bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white px-2.5 py-1 rounded-lg text-xs flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
-                              title="Cào tối đa 1,000 comments không có rep của tác giả cho video này"
-                            >
-                              {isCrawlingDeep ? (
-                                <>
-                                  <Loader2 size={12} className="animate-spin text-purple-400" />
-                                  <span>Đang cào 1,000 cmt...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Zap size={12} className="text-amber-400" />
-                                  <span>⚡ Cào 1,000 Comments</span>
-                                </>
-                              )}
-                            </button>
-
-                            <button
-                              onClick={() => setExpandedCommentVid(isExpanded ? null : vid.video_id)}
-                              className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 transition cursor-pointer"
-                            >
-                              <span>{isExpanded ? "Thu gọn" : "Xem chi tiết ý kiến"}</span>
-                              <ChevronRight size={14} className={`transform transition ${isExpanded ? "rotate-90" : ""}`} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Expanded Voice-of-Customer Details */}
-                        {isExpanded && (
-                          <div className="mt-3.5 grid md:grid-cols-2 gap-3.5 bg-slate-950/80 p-4 rounded-2xl border border-slate-800 text-xs animate-in fade-in duration-200">
-                            <div>
-                              <div className="flex items-center gap-1.5 font-bold text-emerald-400 mb-2">
-                                <HelpCircle size={14} />
-                                <span>Ý Định Mua & Câu Hỏi Xin Link/Giá ({ins?.buying_intent?.length || 0})</span>
-                              </div>
-                              {(!ins?.buying_intent || ins.buying_intent.length === 0) ? (
-                                <p className="text-slate-500 italic">Chưa phát hiện câu hỏi mua hàng nổi bật.</p>
-                              ) : (
-                                <ul className="space-y-1.5">
-                                  {ins.buying_intent.slice(0, 5).map((item, qIdx) => (
-                                    <li key={qIdx} className="bg-slate-900 p-2 rounded-xl border border-slate-800/80 text-slate-300">
-                                      <span className="font-semibold text-white">@{item.username}:</span> "{item.text}"
-                                      {item.likes > 0 && <span className="text-[10px] text-pink-400 ml-2 font-mono">({item.likes} tym)</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-
-                            <div>
-                              <div className="flex items-center gap-1.5 font-bold text-amber-400 mb-2">
-                                <ShieldAlert size={14} />
-                                <span>Rào Cản & Nghi Ngại Của Khách ({ins?.objections?.length || 0})</span>
-                              </div>
-                              {(!ins?.objections || ins.objections.length === 0) ? (
-                                <p className="text-slate-500 italic">Khán giả không chê bai hoặc chưa phát hiện rào cản lớn.</p>
-                              ) : (
-                                <ul className="space-y-1.5">
-                                  {ins.objections.slice(0, 5).map((item, oIdx) => (
-                                    <li key={oIdx} className="bg-slate-900 p-2 rounded-xl border border-slate-800/80 text-slate-300">
-                                      <span className="font-semibold text-white">@{item.username}:</span> "{item.text}"
-                                      {item.likes > 0 && <span className="text-[10px] text-pink-400 ml-2 font-mono">({item.likes} tym)</span>}
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+          <VideoCardsGrid
+            videos={data?.videos || []}
+            keyword={keyword}
+            isCrawling={loading}
+            crawlProgress={data?.videos?.length ? Math.min(100, Math.round((data.videos.length / 100) * 100)) : (loading ? 45 : 100)}
+            onSelectCreator={(cName) => setDrawerCreator(cName)}
+          />
         )}
 
         {/* TAB 2: MACRO PATTERNS & VIRAL DNA */}
@@ -6404,13 +5369,14 @@ ${data.master_analysis.summary}\n`;
                                     </button>
                                     <button
                                       onClick={() => {
-                                        setSelectedHashtagFilter(item.tag);
-                                        setActiveTab("reviews");
+                                        navigator.clipboard.writeText(item.tag);
+                                        setCopiedCaptionText(item.tag);
+                                        setTimeout(() => setCopiedCaptionText(null), 2000);
                                       }}
                                       className="text-[10px] bg-sky-950/70 border border-sky-800/70 hover:bg-sky-900 text-sky-300 px-2 py-1 rounded-lg transition cursor-pointer"
-                                      title="Lọc các video có thẻ này ở Tab Thẻ Video"
+                                      title="Sao chép thẻ này"
                                     >
-                                      Lọc Video
+                                      {copiedCaptionText === item.tag ? "Đã chép" : "Sao chép"}
                                     </button>
                                   </div>
                                 </td>
@@ -7200,177 +6166,6 @@ ${data.master_analysis.summary}\n`;
           </div>
         )}
 
-        {/* Multimodal Deep Analysis Modal */}
-        {multimodalModalVid && (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
-            <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6 md:p-8 shadow-2xl">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-800 mb-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-2.5 bg-gradient-to-tr from-pink-500 to-violet-600 rounded-2xl shadow-lg shadow-pink-500/20">
-                    <Film size={20} className="text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-xl font-black text-white flex items-center gap-2">
-                      <span>Bản Bóc Băng & Soi Góc Quay Multimodal 360°</span>
-                      <span className="bg-pink-950/80 border border-pink-700 text-pink-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
-                        Mac Mini M4 Local AI
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Video ID: {multimodalModalVid.video_id} &bull; Phân tích bởi Whisper AI + Qwen-VL Vision
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setMultimodalModalVid(null)}
-                  className="text-slate-400 hover:text-white text-xl font-bold p-2 rounded-xl hover:bg-slate-800 transition cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* 3 Keyframes Preview Gallery */}
-              {multimodalModalVid.keyframes && multimodalModalVid.keyframes.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center gap-2 text-xs font-bold text-violet-400 uppercase tracking-wider mb-3">
-                    <Camera size={14} />
-                    <span>3 Khung Hình Chủ Chốt Được Trích Xuất (Keyframes)</span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {multimodalModalVid.keyframes.map((kf, kfIdx) => {
-                      const labels = ["0-1s: Hook Thị Giác (Scroll-Stopper)", "Giữa: Trình Diễn / Góc Phòng", "Cuối: Kêu Gọi Hành Động (CTA)"];
-                      return (
-                        <div key={kfIdx} className="bg-slate-950 p-2.5 rounded-2xl border border-slate-800 flex flex-col items-center">
-                          <img
-                            src={`${API_BASE}${kf}`}
-                            alt={labels[kfIdx] || `Keyframe ${kfIdx + 1}`}
-                            className="w-full h-44 object-cover rounded-xl border border-slate-800 mb-2 shadow-md"
-                          />
-                          <span className="text-[11px] font-medium text-slate-400 text-center">
-                            {labels[kfIdx] || `Khung hình ${kfIdx + 1}`}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Grid 2 Columns: Spoken Audio & Visual Breakdown */}
-              <div className="grid md:grid-cols-2 gap-4 mb-6">
-                {/* Audio Column */}
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-pink-400 uppercase tracking-wider">
-                        <Mic size={14} />
-                        <span>Lời Thoại Bóc Băng (Whisper AI)</span>
-                      </div>
-                      <button
-                        onClick={() => {
-                          if (multimodalModalVid.transcript) {
-                            navigator.clipboard.writeText(multimodalModalVid.transcript);
-                            alert("Đã sao chép toàn văn lời thoại!");
-                          }
-                        }}
-                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer bg-slate-900 px-2 py-1 rounded-lg border border-slate-800"
-                      >
-                        <Copy size={11} /> Sao chép
-                      </button>
-                    </div>
-
-                    {/* Spoken Hook Highlight */}
-                    <div className="bg-pink-950/30 border border-pink-800/40 p-3 rounded-xl mb-3">
-                      <span className="text-[10px] font-bold text-pink-400 uppercase block mb-1">
-                        🎣 Lời Thoại Mở Đầu 3 Giây (Spoken Hook)
-                      </span>
-                      <p className="text-sm font-semibold text-white italic">
-                        &ldquo;{multimodalModalVid.spoken_hook || "Không phát hiện lời nói trong 3s đầu"}&rdquo;
-                      </p>
-                    </div>
-
-                    {/* Full Transcript */}
-                    <div className="mt-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase block mb-1">
-                        Toàn Văn Lời Thoại KOC:
-                      </span>
-                      <p className="text-xs text-slate-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto pr-2 bg-slate-900/50 p-3 rounded-xl border border-slate-800/60 font-sans">
-                        {multimodalModalVid.transcript || "Âm thanh nền nhạc (Không có lời thoại)"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Visual Vision Column */}
-                <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 space-y-3.5">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-violet-400 uppercase tracking-wider">
-                    <Camera size={14} />
-                    <span>Phân Tích Thị Giác (Qwen-VL Vision)</span>
-                  </div>
-
-                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
-                    <span className="text-[10px] font-bold text-violet-400 uppercase block mb-0.5">
-                      👁️ Điểm Dừng Mắt (Visual Hook)
-                    </span>
-                    <p className="text-xs text-slate-200">
-                      {multimodalModalVid.visual_hook || "Góc quay cận cảnh sản phẩm"}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
-                    <span className="text-[10px] font-bold text-blue-400 uppercase block mb-0.5">
-                      🏠 Bối Cảnh / Không Gian (Setting)
-                    </span>
-                    <p className="text-xs text-slate-200">
-                      {multimodalModalVid.setting || "Không gian phòng thực tế"}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800">
-                    <span className="text-[10px] font-bold text-amber-400 uppercase block mb-0.5">
-                      🔤 Chữ Nổi Trên Màn Hình (On-Screen Text OCR)
-                    </span>
-                    <p className="text-xs text-slate-200 font-mono">
-                      {multimodalModalVid.on_screen_text || "Không có chữ nổi"}
-                    </p>
-                  </div>
-
-                  <div className="bg-slate-900/70 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-emerald-400 uppercase">
-                      🎨 Phong Cách Khung Hình:
-                    </span>
-                    <span className="text-xs font-semibold text-emerald-300">
-                      {multimodalModalVid.visual_style || "Aesthetic Room Tour"}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* DTC Angle & Winning Formula */}
-              <div className="bg-slate-950 p-5 rounded-2xl border border-slate-800/90 mb-6">
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400 uppercase tracking-wider">
-                    <Target size={14} />
-                    <span>Trường Phái DTC & Công Thức Đề Xuất (Ad Angle & Brief)</span>
-                  </div>
-                  {renderAdAngleBadge(multimodalModalVid.ad_angle)}
-                </div>
-
-                <div className="bg-slate-900/70 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
-                  <strong className="text-white block mb-1">💡 Công thức chuyển hóa (Winning Formula):</strong>
-                  {multimodalModalVid.winning_formula}
-                </div>
-              </div>
-
-              <button
-                onClick={() => setMultimodalModalVid(null)}
-                className="w-full bg-slate-800 hover:bg-slate-700 text-white font-semibold py-3 rounded-xl transition cursor-pointer"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Gemini API Key Configuration Modal */}
         {showApiKeyModal && (
@@ -7940,6 +6735,18 @@ ${data.master_analysis.summary}\n`;
             </div>
           </div>
         )}
+
+        {/* 1-TAP QUICK CHANNEL ANALYTICS DRAWER */}
+        <ChannelQuickDrawer
+          isOpen={!!drawerCreator}
+          creatorName={drawerCreator}
+          keyword={keyword}
+          onClose={() => setDrawerCreator(null)}
+          onNavigateToTab2={(_creatorName) => {
+            setDrawerCreator(null);
+            setActiveTab("trending");
+          }}
+        />
       </div>
     </div>
   );

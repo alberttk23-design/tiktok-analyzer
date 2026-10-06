@@ -46,6 +46,8 @@ def init_db():
         sound_original INTEGER DEFAULT 0,
         sound_type TEXT DEFAULT 'unknown',
         sound_id TEXT DEFAULT '',
+        cover_url TEXT DEFAULT '',
+        avatar_url TEXT DEFAULT '',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
@@ -201,6 +203,43 @@ def init_db():
         if col_name not in v_cols:
             cursor.execute(f"ALTER TABLE videos ADD COLUMN {col_name} {col_type}")
 
+    # Migration for cover_url and avatar_url in videos
+    if "cover_url" not in v_cols:
+        cursor.execute("ALTER TABLE videos ADD COLUMN cover_url TEXT DEFAULT ''")
+    if "avatar_url" not in v_cols:
+        cursor.execute("ALTER TABLE videos ADD COLUMN avatar_url TEXT DEFAULT ''")
+
+    # Backfill avatar_url from creators table where available
+    try:
+        cursor.execute("""
+        UPDATE videos
+        SET avatar_url = (
+            SELECT creators.avatar_url FROM creators
+            WHERE creators.creator = videos.creator AND creators.avatar_url IS NOT NULL AND creators.avatar_url != ''
+        )
+        WHERE (videos.avatar_url IS NULL OR videos.avatar_url = '')
+          AND EXISTS (
+            SELECT 1 FROM creators
+            WHERE creators.creator = videos.creator AND creators.avatar_url IS NOT NULL AND creators.avatar_url != ''
+          )
+        """)
+    except Exception as e:
+        print(f"[DB Migration Notice] avatar_url backfill: {e}")
+
+    # Backfill cover_url from existing keyframes if cover_url is empty
+    try:
+        kf_dir = BASE_DIR / "data" / "keyframes"
+        if kf_dir.exists():
+            for kf_file in kf_dir.glob("*_kf1.jpg"):
+                vid = kf_file.stem.replace("_kf1", "")
+                cursor.execute("""
+                UPDATE videos
+                SET cover_url = ?
+                WHERE video_id = ? AND (cover_url IS NULL OR cover_url = '')
+                """, (f"/api/keyframe/{kf_file.name}", vid))
+    except Exception as e:
+        print(f"[DB Migration Notice] keyframe cover_url backfill: {e}")
+
     # Migration for top_topics_json in comment_insights
     cursor.execute("PRAGMA table_info(comment_insights)")
     ci_cols = {row["name"] for row in cursor.fetchall()}
@@ -349,27 +388,49 @@ def get_existing_video_ids():
     return video_ids, urls
 
 
-def save_video(video_data):
-    conn = get_db()
-    cursor = conn.cursor()
+def _prepare_video_data(video_data: dict) -> dict:
     data = dict(video_data)
+    data.setdefault("url", "")
+    data.setdefault("keyword", "default")
+    data.setdefault("creator", "")
+    data.setdefault("caption", "")
+    data.setdefault("upload_date", "")
+    data.setdefault("duration_sec", 0)
+    data.setdefault("views", 0)
+    data.setdefault("likes", 0)
+    data.setdefault("comments", 0)
+    data.setdefault("reposts", 0)
+    data.setdefault("saves", 0)
+    data.setdefault("engagement_rate", 0.0)
+    data.setdefault("score", 0.0)
     data.setdefault("creator_followers", 0)
     data.setdefault("sound_title", "")
     data.setdefault("sound_author", "")
     data.setdefault("sound_original", 0)
     data.setdefault("sound_type", "unknown")
     data.setdefault("sound_id", "")
+    data.setdefault("cover_url", "")
+    data.setdefault("avatar_url", "")
+    return data
+
+
+def save_video(video_data):
+    conn = get_db()
+    cursor = conn.cursor()
+    data = _prepare_video_data(video_data)
     cursor.execute("""
     INSERT INTO videos (
         video_id, url, keyword, creator, caption, upload_date,
         duration_sec, views, likes, comments, reposts, saves,
         engagement_rate, score, creator_followers,
-        sound_title, sound_author, sound_original, sound_type, sound_id
+        sound_title, sound_author, sound_original, sound_type, sound_id,
+        cover_url, avatar_url
     ) VALUES (
         :video_id, :url, :keyword, :creator, :caption, :upload_date,
         :duration_sec, :views, :likes, :comments, :reposts, :saves,
         :engagement_rate, :score, :creator_followers,
-        :sound_title, :sound_author, :sound_original, :sound_type, :sound_id
+        :sound_title, :sound_author, :sound_original, :sound_type, :sound_id,
+        :cover_url, :avatar_url
     )
     ON CONFLICT(video_id) DO UPDATE SET
         views=excluded.views,
@@ -384,10 +445,58 @@ def save_video(video_data):
         sound_author=CASE WHEN excluded.sound_author != '' THEN excluded.sound_author ELSE videos.sound_author END,
         sound_original=CASE WHEN excluded.sound_title != '' THEN excluded.sound_original ELSE videos.sound_original END,
         sound_type=CASE WHEN excluded.sound_type != 'unknown' THEN excluded.sound_type ELSE videos.sound_type END,
-        sound_id=CASE WHEN excluded.sound_id != '' THEN excluded.sound_id ELSE videos.sound_id END
+        sound_id=CASE WHEN excluded.sound_id != '' THEN excluded.sound_id ELSE videos.sound_id END,
+        cover_url=CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
+        avatar_url=CASE WHEN excluded.avatar_url != '' THEN excluded.avatar_url ELSE videos.avatar_url END
     """, data)
     conn.commit()
     conn.close()
+
+
+def save_videos_batch(videos_list: list) -> int:
+    """Save or update multiple video records in a single transaction."""
+    if not videos_list:
+        return 0
+    conn = get_db()
+    cursor = conn.cursor()
+    count = 0
+    for video_data in videos_list:
+        data = _prepare_video_data(video_data)
+        cursor.execute("""
+        INSERT INTO videos (
+            video_id, url, keyword, creator, caption, upload_date,
+            duration_sec, views, likes, comments, reposts, saves,
+            engagement_rate, score, creator_followers,
+            sound_title, sound_author, sound_original, sound_type, sound_id,
+            cover_url, avatar_url
+        ) VALUES (
+            :video_id, :url, :keyword, :creator, :caption, :upload_date,
+            :duration_sec, :views, :likes, :comments, :reposts, :saves,
+            :engagement_rate, :score, :creator_followers,
+            :sound_title, :sound_author, :sound_original, :sound_type, :sound_id,
+            :cover_url, :avatar_url
+        )
+        ON CONFLICT(video_id) DO UPDATE SET
+            views=excluded.views,
+            likes=excluded.likes,
+            comments=excluded.comments,
+            reposts=excluded.reposts,
+            saves=excluded.saves,
+            engagement_rate=excluded.engagement_rate,
+            score=excluded.score,
+            creator_followers=excluded.creator_followers,
+            sound_title=CASE WHEN excluded.sound_title != '' THEN excluded.sound_title ELSE videos.sound_title END,
+            sound_author=CASE WHEN excluded.sound_author != '' THEN excluded.sound_author ELSE videos.sound_author END,
+            sound_original=CASE WHEN excluded.sound_title != '' THEN excluded.sound_original ELSE videos.sound_original END,
+            sound_type=CASE WHEN excluded.sound_type != 'unknown' THEN excluded.sound_type ELSE videos.sound_type END,
+            sound_id=CASE WHEN excluded.sound_id != '' THEN excluded.sound_id ELSE videos.sound_id END,
+            cover_url=CASE WHEN excluded.cover_url != '' THEN excluded.cover_url ELSE videos.cover_url END,
+            avatar_url=CASE WHEN excluded.avatar_url != '' THEN excluded.avatar_url ELSE videos.avatar_url END
+        """, data)
+        count += 1
+    conn.commit()
+    conn.close()
+    return count
 
 
 def update_video_sound(video_id: str, sound_type: str, sound_title: str = "", sound_author: str = "", sound_original: Optional[bool] = None):
@@ -1129,6 +1238,35 @@ def merge_niche_folders(source_name: str, target_name: str):
     return {"source": src, "target": tgt}
 
 
+def get_existing_keyframes_set() -> set:
+    """Return set of filenames in data/keyframes for fast lookup."""
+    kf_dir = BASE_DIR / "data" / "keyframes"
+    if not kf_dir.exists():
+        return set()
+    try:
+        import os
+        return set(os.listdir(kf_dir))
+    except Exception:
+        return set()
+
+
+def enrich_video_record(v: dict, keyframes_set: Optional[set] = None) -> dict:
+    """Ensure cover_url and avatar_url are included, with fallback to keyframe image if available."""
+    v["cover_url"] = v.get("cover_url") or ""
+    v["avatar_url"] = v.get("avatar_url") or ""
+    vid = str(v.get("video_id") or "")
+    if not v["cover_url"] and vid:
+        kf_filename = f"{vid}_kf1.jpg"
+        if keyframes_set is not None:
+            if kf_filename in keyframes_set:
+                v["cover_url"] = f"/api/keyframe/{kf_filename}"
+        else:
+            kf_path = BASE_DIR / "data" / "keyframes" / kf_filename
+            if kf_path.exists():
+                v["cover_url"] = f"/api/keyframe/{kf_filename}"
+    return v
+
+
 def get_results_by_keyword(keyword=None):
     conn = get_db()
     cursor = conn.cursor()
@@ -1148,9 +1286,21 @@ def get_results_by_keyword(keyword=None):
                 return {"keyword": "", "videos": [], "reviews": [], "ideas": [], "briefs": [], "comment_insights": {}, "master_analysis": None, "master_analyses": {}}
 
     cursor.execute("""
-    SELECT * FROM videos WHERE keyword = ? ORDER BY score DESC
+    SELECT v.*,
+           COALESCE(NULLIF(v.avatar_url, ''), c.avatar_url, '') AS resolved_avatar_url
+    FROM videos v
+    LEFT JOIN creators c ON v.creator = c.creator
+    WHERE v.keyword = ? ORDER BY v.score DESC
     """, (keyword,))
-    videos = [dict(r) for r in cursor.fetchall()]
+    raw_videos = cursor.fetchall()
+    kf_set = get_existing_keyframes_set()
+    videos = []
+    for r in raw_videos:
+        item = dict(r)
+        if not item.get("avatar_url") and item.get("resolved_avatar_url"):
+            item["avatar_url"] = item["resolved_avatar_url"]
+        item.pop("resolved_avatar_url", None)
+        videos.append(enrich_video_record(item, kf_set))
 
     cursor.execute("""
     SELECT ar.* FROM analysis_reviews ar
@@ -1290,6 +1440,43 @@ def get_results_by_keyword(keyword=None):
             "crawl_percentage": crawl_pct
         }
     }
+
+
+def get_all_videos(keyword: Optional[str] = None, limit: Optional[int] = None, order_by: str = "score DESC") -> list:
+    """Retrieve all video records with cover_url and avatar_url enriched."""
+    conn = get_db()
+    cursor = conn.cursor()
+    query = """
+    SELECT v.*,
+           COALESCE(NULLIF(v.avatar_url, ''), c.avatar_url, '') AS resolved_avatar_url
+    FROM videos v
+    LEFT JOIN creators c ON v.creator = c.creator
+    """
+    params = []
+    if keyword and keyword.strip() and keyword.strip() != "all":
+        query += " WHERE v.keyword = ?"
+        params.append(keyword.strip())
+
+    safe_order = "v.score DESC"
+    if order_by in ["score DESC", "views DESC", "likes DESC", "created_at DESC", "id DESC"]:
+        safe_order = f"v.{order_by}"
+    query += f" ORDER BY {safe_order}"
+
+    if limit and limit > 0:
+        query += f" LIMIT {int(limit)}"
+    cursor.execute(query, params)
+    raw_videos = cursor.fetchall()
+    conn.close()
+
+    kf_set = get_existing_keyframes_set()
+    videos = []
+    for r in raw_videos:
+        item = dict(r)
+        if not item.get("avatar_url") and item.get("resolved_avatar_url"):
+            item["avatar_url"] = item["resolved_avatar_url"]
+        item.pop("resolved_avatar_url", None)
+        videos.append(enrich_video_record(item, kf_set))
+    return videos
 
 
 def get_caption_analytics(keyword: str) -> dict:
@@ -1567,16 +1754,17 @@ def get_creators_with_analytics(keyword: Optional[str] = None):
     cursor.execute("SELECT * FROM creators")
     creators_meta = {r["creator"]: dict(r) for r in cursor.fetchall()}
     
+    kf_set = get_existing_keyframes_set()
     if keyword:
         cursor.execute("""
-        SELECT video_id, creator, views, likes, saves, score, caption, url
+        SELECT video_id, creator, views, likes, saves, score, caption, url, cover_url, avatar_url
         FROM videos
         WHERE keyword = ?
         ORDER BY views DESC
         """, (keyword,))
     else:
         cursor.execute("""
-        SELECT video_id, creator, views, likes, saves, score, caption, url
+        SELECT video_id, creator, views, likes, saves, score, caption, url, cover_url, avatar_url
         FROM videos
         ORDER BY views DESC
         """)
@@ -1588,7 +1776,8 @@ def get_creators_with_analytics(keyword: Optional[str] = None):
         if c_name not in creator_top_videos:
             creator_top_videos[c_name] = []
         if len(creator_top_videos[c_name]) < 3:
-            creator_top_videos[c_name].append(dict(v))
+            v_dict = enrich_video_record(dict(v), kf_set)
+            creator_top_videos[c_name].append(v_dict)
             
     conn.close()
     
@@ -1795,8 +1984,9 @@ def get_trending_creators_growth(
     creators_meta = {r["creator"]: dict(r) for r in cursor.fetchall()}
     
     # 5. Fetch winning videos in the recent timeframe for all matching creators
+    kf_set = get_existing_keyframes_set()
     vids_sql = """
-        SELECT video_id, creator, views, likes, comments, saves, score, caption, url, upload_date, sound_type
+        SELECT video_id, creator, views, likes, comments, saves, score, caption, url, upload_date, sound_type, cover_url, avatar_url
         FROM videos
         WHERE upload_date >= ? AND upload_date <= ?
     """
@@ -1815,7 +2005,7 @@ def get_trending_creators_growth(
         if c_name not in winning_vids_map:
             winning_vids_map[c_name] = []
         if len(winning_vids_map[c_name]) < 3:
-            winning_vids_map[c_name].append(dict(v))
+            winning_vids_map[c_name].append(enrich_video_record(dict(v), kf_set))
             
     # 6. Fetch monthly breakdowns per creator
     active_creator_names = [r["creator"] for r in creator_rows]

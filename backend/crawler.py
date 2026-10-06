@@ -240,6 +240,8 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
 
                     video_info = item.get("video") or {}
                     duration = int(video_info.get("duration") or 0)
+                    cover_url = video_info.get("cover") or video_info.get("originCover") or video_info.get("dynamicCover") or ""
+                    avatar_url = author_obj.get("avatarThumb") or author_obj.get("avatarMedium") or author_obj.get("avatarLarger") or ""
 
                     create_time = item.get("createTime")
                     if create_time:
@@ -298,7 +300,9 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
                         "sound_author": sound_author,
                         "sound_original": sound_original,
                         "sound_type": sound_type,
-                        "sound_id": sound_id
+                        "sound_id": sound_id,
+                        "cover_url": cover_url,
+                        "avatar_url": avatar_url
                     }
                     print(f"[Crawler Stream] Discovered NEW video #{len(discovered_new_videos)} (Scanned: {len(seen_in_session)}): @{creator} ({views:,} views) - {vid}")
             except Exception as e:
@@ -506,6 +510,9 @@ def crawl_tiktok_videos(keyword, target_count=20, job_id=None, target_folder=Non
                 "engagement_rate": eng_rate,
                 "score": score
             })
+            thumbnail = meta.get("thumbnail") or ""
+            if thumbnail and not vrec.get("cover_url"):
+                vrec["cover_url"] = thumbnail
             vrec.pop("_need_ytdlp", None)
 
         db.save_video(vrec)
